@@ -1,0 +1,85 @@
+experiment:
+  name: ramp_mosi
+  seed: 1111
+  device: cuda
+  output_dir: /media/disk3/muxy/Method/RAMP-MSA/runs/tune_mosi_mem_static_weak
+  deterministic: false
+data:
+  synthetic: false
+  path: /media/disk3/muxy/Dataset/Method/Method/aligned_mosi_ramp_bert.pkl
+  num_workers: 4
+  pin_memory: true
+  keys:
+    text: text
+    audio: audio
+    vision: vision
+    label: regression_labels
+    id: id
+    audio_lengths: audio_lengths
+    vision_lengths: vision_lengths
+  missing_rate: 0.2
+  dataset_name: mosi
+task:
+  type: regression
+model:
+  d_model: 128
+  nhead: 4
+  temporal_layers: 1
+  fusion_layers: 2
+  ff_mult: 4
+  dropout: 0.2
+  resampler_tokens: 4
+  interaction_dim: 128
+  max_text_tokens: 50
+  max_audio_tokens: 96
+  max_vision_tokens: 96
+memory:
+  enabled: true
+  num_regimes: 8
+  slots_per_regime: 32
+  key_dim: 128
+  top_regimes: 2
+  top_slots: 16
+  route_temperature: 0.12
+  slot_temperature: 0.08
+  writer_momentum: 0.995
+  initial_policy_strength: 0.05
+  oracle_view_dropout: 0.1
+  kmeans_iters: 30
+  utility_momentum: 0.95
+  stats_momentum: 0.95
+  merge_similarity: 0.9
+  merge_momentum: 0.15
+  redundancy_weight: 0.25
+  min_updates: 1
+  max_updates: 3
+  plasticity_bias: -0.5
+  plasticity_hardness: 1.0
+  plasticity_novelty: 2.0
+  plasticity_bad_gain: 1.0
+  write_hardness_power: 1.0
+  write_novelty_power: 1.0
+  write_stability_power: 1.0
+  online_update: false
+loss:
+  final: 1.0
+  base: 0.3
+  policy: 0.05
+  route_balance: 0.001
+train:
+  epochs: 40
+  warmup_epochs: 5
+  batch_size: 32
+  eval_batch_size: 64
+  lr: 0.0002
+  weight_decay: 0.0001
+  smooth_l1_beta: 0.5
+  grad_clip: 1.0
+  amp: true
+  early_stop_patience: 10
+  lr_patience: 3
+  lr_factor: 0.5
+  min_lr: 1.0e-06
+  selection_metric: Acc2_non0
+  selection_mode: max
+  evaluate_test: false

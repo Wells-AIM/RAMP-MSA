@@ -1,0 +1,433 @@
+from __future__ import annotations
+
+import json
+import hashlib
+import math
+import time
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+
+import numpy as np
+import torch
+from torch.nn.utils import clip_grad_norm_
+from tqdm import tqdm
+
+from .losses import cosine_policy_loss, route_balance_loss, task_loss_per_sample
+from .metrics import classification_metrics, regression_metrics
+from .utils import atomic_torch_save, ensure_dir, json_dump, to_device
+
+
+def _prediction_from_logits(logits: torch.Tensor, task_type: str) -> torch.Tensor:
+    if task_type == "regression":
+        return logits.squeeze(-1)
+    return logits.argmax(dim=-1)
+
+
+def _metric_direction(task_type: str) -> Tuple[str, str]:
+    return ("MAE", "min") if task_type == "regression" else ("MacroF1", "max")
+
+
+def _better(value: float, best: float, mode: str) -> bool:
+    return value < best if mode == "min" else value > best
+
+
+def _stable_missing_seed(dataset: str, split: str, seed: int, epoch: int) -> int:
+    payload = f"{dataset}|{split}|{seed}|{epoch}".encode("utf-8")
+    return int.from_bytes(hashlib.sha256(payload).digest()[:8], "little")
+
+
+def deterministic_missing_matrix(
+    size: int,
+    missing_rate: float,
+    dataset: str,
+    split: str,
+    seed: int,
+    epoch: int = 0,
+    modalities: int = 3,
+) -> np.ndarray:
+    """Match HME's exact-rate missingness with at least one visible modality."""
+    if size < 0 or modalities < 1:
+        raise ValueError("size must be non-negative and modalities must be positive")
+    if not 0.0 <= missing_rate <= (modalities - 1) / modalities:
+        raise ValueError("missing_rate would permit a sample with no visible modality")
+    available = np.ones((size, modalities), dtype=np.int64)
+    missing_count = int(round(size * modalities * missing_rate))
+    rng = np.random.default_rng(_stable_missing_seed(dataset, split, seed, epoch))
+    used = 0
+    for flat_index in rng.permutation(size * modalities):
+        row, column = divmod(int(flat_index), modalities)
+        if available[row].sum() > 1:
+            available[row, column] = 0
+            used += 1
+            if used == missing_count:
+                break
+    if used != missing_count:
+        raise RuntimeError("could not construct the requested missingness matrix")
+    return available
+
+
+def _missing_table(cfg, loader, split: str, epoch: int, device: torch.device) -> torch.Tensor | None:
+    missing_rate = float(cfg.data.get("missing_rate", 0.0))
+    if missing_rate <= 0:
+        return None
+    dataset = str(cfg.data.get("dataset_name", cfg.experiment.get("name", "dataset")))
+    matrix = deterministic_missing_matrix(
+        len(loader.dataset), missing_rate, dataset, split,
+        int(cfg.experiment.seed), epoch,
+    )
+    return torch.from_numpy(matrix).to(device=device, dtype=torch.bool)
+
+
+def _apply_missingness(batch: Dict[str, Any], table: torch.Tensor | None) -> Dict[str, Any]:
+    if table is None:
+        return batch
+    if "index" not in batch:
+        raise KeyError("batch is missing stable dataset indices required for deterministic missingness")
+    availability = table[batch["index"]]
+    batch = dict(batch)
+    batch["availability"] = availability
+    for column, modality in enumerate(("text", "audio", "vision")):
+        visible = availability[:, column]
+        values = batch[modality].clone()
+        mask = batch[f"{modality}_mask"].clone()
+        values[~visible] = 0
+        # Avoid an all-padding Transformer input; the post-resampler
+        # availability gate in RAMPModel removes this placeholder completely.
+        mask[~visible] = False
+        mask[~visible, 0] = True
+        batch[modality] = values
+        batch[f"{modality}_mask"] = mask
+    return batch
+
+
+def _apply_eval_corruption(batch: Dict[str, Any], corruption: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    if not corruption:
+        return batch
+    batch = dict(batch)
+    drop = corruption.get("drop_modality", None)
+    if drop in {"text", "audio", "vision"}:
+        batch[drop] = torch.zeros_like(batch[drop])
+        # Keep one valid token so Transformer does not receive an all-padding sequence.
+        mask = torch.zeros_like(batch[f"{drop}_mask"])
+        mask[:, 0] = True
+        batch[f"{drop}_mask"] = mask
+    noise_mod = corruption.get("noise_modality", None)
+    noise_std = float(corruption.get("noise_std", 0.0))
+    if noise_mod in {"text", "audio", "vision"} and noise_std > 0:
+        mask = batch[f"{noise_mod}_mask"].unsqueeze(-1).to(batch[noise_mod].dtype)
+        batch[noise_mod] = batch[noise_mod] + noise_std * torch.randn_like(batch[noise_mod]) * mask
+    return batch
+
+
+@torch.no_grad()
+def evaluate(
+    model,
+    loader,
+    device: torch.device,
+    cfg,
+    corruption: Optional[Dict[str, Any]] = None,
+    availability_table: torch.Tensor | None = None,
+) -> Dict[str, Any]:
+    model.eval()
+    task_type = str(cfg.task.type)
+    preds, base_preds, labels = [], [], []
+    losses, base_losses = [], []
+    difficulties = []
+    gains = []
+    gates = []
+
+    for batch in loader:
+        batch = to_device(batch, device)
+        batch = _apply_missingness(batch, availability_table)
+        batch = _apply_eval_corruption(batch, corruption)
+        out = model(batch, use_memory=True)
+        y = batch["label"]
+        final_vec = task_loss_per_sample(
+            out["final_logits"], y, task_type, smooth_l1_beta=float(cfg.train.get("smooth_l1_beta", 1.0))
+        )
+        base_vec = task_loss_per_sample(
+            out["base_logits"], y, task_type, smooth_l1_beta=float(cfg.train.get("smooth_l1_beta", 1.0))
+        )
+        p = _prediction_from_logits(out["final_logits"], task_type)
+        bp = _prediction_from_logits(out["base_logits"], task_type)
+        preds.append(p.detach().cpu())
+        base_preds.append(bp.detach().cpu())
+        labels.append(y.detach().cpu())
+        losses.append(final_vec.detach().cpu())
+        base_losses.append(base_vec.detach().cpu())
+        # Pairwise + triple interaction strength is the conflict/complexity proxy.
+        diff = out["components"][:, 3:].norm(dim=-1).sum(dim=-1)
+        difficulties.append(diff.detach().cpu())
+        gains.append((base_vec - final_vec).detach().cpu())
+        gates.append(out["memory_gate"].squeeze(-1).detach().cpu())
+
+    pred = torch.cat(preds).numpy()
+    base_pred = torch.cat(base_preds).numpy()
+    y = torch.cat(labels).numpy()
+    loss = float(torch.cat(losses).mean().item())
+    base_loss = float(torch.cat(base_losses).mean().item())
+    diff = torch.cat(difficulties).numpy()
+    gain = torch.cat(gains).numpy()
+    gate = torch.cat(gates).numpy()
+
+    if task_type == "regression":
+        metrics = regression_metrics(pred, y)
+        base_metrics = regression_metrics(base_pred, y)
+    else:
+        metrics = classification_metrics(pred, y)
+        base_metrics = classification_metrics(base_pred, y)
+
+    # Difficulty tertiles: a paper-facing diagnostic for the hypothesis that
+    # procedural memory helps most when modality interactions are complex.
+    q1, q2 = np.quantile(diff, [1.0 / 3.0, 2.0 / 3.0])
+    buckets = {
+        "low": diff <= q1,
+        "mid": (diff > q1) & (diff <= q2),
+        "high": diff > q2,
+    }
+    bucket_metrics = {}
+    for name, mask in buckets.items():
+        if not mask.any():
+            continue
+        if task_type == "regression":
+            bucket_metrics[name] = {
+                "MAE": float(np.mean(np.abs(pred[mask] - y[mask]))),
+                "BaseMAE": float(np.mean(np.abs(base_pred[mask] - y[mask]))),
+                "MeanMemoryGain": float(np.mean(gain[mask])),
+            }
+        else:
+            bucket_metrics[name] = {
+                "Acc": float(np.mean(pred[mask] == y[mask])),
+                "BaseAcc": float(np.mean(base_pred[mask] == y[mask])),
+                "MeanMemoryGain": float(np.mean(gain[mask])),
+            }
+
+    return {
+        "loss": loss,
+        "base_loss": base_loss,
+        "metrics": metrics,
+        "base_metrics": base_metrics,
+        "mean_memory_gain": float(np.mean(gain)),
+        "mean_memory_gate": float(np.mean(gate)),
+        "difficulty_buckets": bucket_metrics,
+        "memory_stats": model.memory.stats(),
+        "corruption": corruption or {},
+    }
+
+
+def train(model, loaders, device: torch.device, cfg, output_dir: str | Path) -> Dict[str, Any]:
+    output_dir = ensure_dir(output_dir)
+    task_type = str(cfg.task.type)
+    optimizer = torch.optim.AdamW(
+        [p for p in model.parameters() if p.requires_grad],
+        lr=float(cfg.train.lr),
+        weight_decay=float(cfg.train.get("weight_decay", 1e-4)),
+    )
+    metric_name, metric_mode = _metric_direction(task_type)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer,
+        mode=metric_mode,
+        factor=float(cfg.train.get("lr_factor", 0.5)),
+        patience=int(cfg.train.get("lr_patience", 3)),
+        min_lr=float(cfg.train.get("min_lr", 1e-6)),
+    )
+
+    amp_enabled = bool(cfg.train.get("amp", True)) and device.type == "cuda"
+    scaler = torch.cuda.amp.GradScaler(enabled=amp_enabled)
+    epochs = int(cfg.train.epochs)
+    warmup_epochs = int(cfg.train.get("warmup_epochs", 3))
+    patience = int(cfg.train.get("early_stop_patience", 10))
+    writer_momentum = float(cfg.memory.get("writer_momentum", 0.99))
+    view_dropout = float(cfg.memory.get("oracle_view_dropout", 0.10))
+    smooth_beta = float(cfg.train.get("smooth_l1_beta", 1.0))
+
+    best_value = math.inf if metric_mode == "min" else -math.inf
+    best_epoch = -1
+    bad_epochs = 0
+    history: List[Dict[str, Any]] = []
+
+    # Warmup cache is intentionally only filled during the final warmup epoch;
+    # one full pass is enough to initialize the external memory without storing
+    # repeated copies of MOSEI samples.
+    warm_keys: List[torch.Tensor] = []
+    warm_values: List[torch.Tensor] = []
+    warm_hardness: List[torch.Tensor] = []
+    valid_missing = _missing_table(cfg, loaders["valid"], "dev", 0, device)
+    test_missing = _missing_table(cfg, loaders["test"], "test", 0, device)
+
+    for epoch in range(epochs):
+        model.train()
+        epoch_loss = 0.0
+        epoch_final = 0.0
+        epoch_base = 0.0
+        epoch_policy = 0.0
+        epoch_route = 0.0
+        epoch_gain = 0.0
+        epoch_writes = 0.0
+        epoch_merges = 0.0
+        num_samples = 0
+        start = time.time()
+        train_missing = _missing_table(cfg, loaders["train"], "train", epoch, device)
+
+        pbar = tqdm(loaders["train"], desc=f"Epoch {epoch+1}/{epochs}", ncols=110)
+        for batch in pbar:
+            batch = to_device(batch, device)
+            batch = _apply_missingness(batch, train_missing)
+            y = batch["label"]
+            optimizer.zero_grad(set_to_none=True)
+
+            with torch.cuda.amp.autocast(enabled=amp_enabled):
+                out = model(batch, use_memory=True)
+                final_vec = task_loss_per_sample(out["final_logits"], y, task_type, smooth_l1_beta=smooth_beta)
+                base_vec = task_loss_per_sample(out["base_logits"], y, task_type, smooth_l1_beta=smooth_beta)
+                final_loss = final_vec.mean()
+                base_loss = base_vec.mean()
+
+            # The oracle policy is a detached training target obtained from a
+            # local gradient in the 7-D interaction action space.
+            oracle_policy, stability = model.oracle_policy(
+                out, y, view_dropout=view_dropout, smooth_l1_beta=smooth_beta
+            )
+
+            with torch.cuda.amp.autocast(enabled=amp_enabled):
+                memory_active = bool(out["memory_active"].item())
+                if memory_active:
+                    policy_loss = cosine_policy_loss(out["retrieved_policy"], oracle_policy)
+                    route_loss = route_balance_loss(out["route_probs"])
+                else:
+                    policy_loss = final_loss * 0.0
+                    route_loss = final_loss * 0.0
+
+                total_loss = (
+                    float(cfg.loss.get("final", 1.0)) * final_loss
+                    + float(cfg.loss.get("base", 0.3)) * base_loss
+                    + float(cfg.loss.get("policy", 0.2)) * policy_loss
+                    + float(cfg.loss.get("route_balance", 0.002)) * route_loss
+                )
+
+            scaler.scale(total_loss).backward()
+            if float(cfg.train.get("grad_clip", 1.0)) > 0:
+                scaler.unscale_(optimizer)
+                clip_grad_norm_(model.parameters(), float(cfg.train.grad_clip))
+            scaler.step(optimizer)
+            scaler.update()
+            model.update_slow_writer(writer_momentum)
+
+            gain = (base_vec.detach() - final_vec.detach())
+            hardness = base_vec.detach()
+
+            # Warmup: collect a stable interaction-key -> oracle-policy table.
+            if model.memory_enabled and not model.memory.ready() and epoch >= warmup_epochs - 1:
+                warm_keys.append(out["slow_key"].detach().cpu())
+                warm_values.append(oracle_policy.detach().cpu())
+                warm_hardness.append(hardness.detach().cpu())
+
+            # Online consolidation starts only after the memory is initialized.
+            if (
+                model.memory_enabled
+                and model.memory.ready()
+                and memory_active
+                and bool(cfg.memory.get("online_update", True))
+            ):
+                with torch.no_grad():
+                    model.memory.credit(out["slot_attn"], gain, out["route_probs"])
+                    update_stats = model.memory.consolidate(
+                        candidate_keys=out["slow_key"].detach(),
+                        candidate_values=oracle_policy.detach(),
+                        hardness=hardness,
+                        stability=stability.detach(),
+                        gains=gain,
+                        hardness_power=float(cfg.memory.get("write_hardness_power", 1.0)),
+                        novelty_power=float(cfg.memory.get("write_novelty_power", 1.0)),
+                        stability_power=float(cfg.memory.get("write_stability_power", 1.0)),
+                    )
+                    epoch_writes += update_stats.get("writes", 0.0)
+                    epoch_merges += update_stats.get("merges", 0.0)
+
+            bs = y.size(0)
+            num_samples += bs
+            epoch_loss += float(total_loss.detach().item()) * bs
+            epoch_final += float(final_loss.detach().item()) * bs
+            epoch_base += float(base_loss.detach().item()) * bs
+            epoch_policy += float(policy_loss.detach().item()) * bs
+            epoch_route += float(route_loss.detach().item()) * bs
+            epoch_gain += float(gain.mean().item()) * bs
+            pbar.set_postfix(
+                loss=f"{epoch_loss/max(num_samples,1):.4f}",
+                mem="on" if model.memory.ready() else "warm",
+                gain=f"{epoch_gain/max(num_samples,1):+.4f}",
+            )
+
+        # Initialize at the end of the final warmup epoch.
+        if model.memory_enabled and not model.memory.ready() and epoch >= warmup_epochs - 1:
+            if len(warm_keys) == 0:
+                raise RuntimeError("Warmup cache is empty; cannot initialize procedural memory")
+            init_stats = model.memory.initialize(
+                torch.cat(warm_keys, dim=0).to(device),
+                torch.cat(warm_values, dim=0).to(device),
+                torch.cat(warm_hardness, dim=0).to(device),
+                seed=int(cfg.experiment.seed),
+                kmeans_iters=int(cfg.memory.get("kmeans_iters", 30)),
+            )
+            print(f"[memory] initialized: {init_stats}")
+            warm_keys.clear(); warm_values.clear(); warm_hardness.clear()
+
+        val = evaluate(model, loaders["valid"], device, cfg, availability_table=valid_missing)
+        value = float(val["metrics"][metric_name])
+        scheduler.step(value)
+
+        record = {
+            "epoch": epoch + 1,
+            "lr": float(optimizer.param_groups[0]["lr"]),
+            "train_total_loss": epoch_loss / max(num_samples, 1),
+            "train_final_loss": epoch_final / max(num_samples, 1),
+            "train_base_loss": epoch_base / max(num_samples, 1),
+            "train_policy_loss": epoch_policy / max(num_samples, 1),
+            "train_route_loss": epoch_route / max(num_samples, 1),
+            "train_memory_gain": epoch_gain / max(num_samples, 1),
+            "memory_writes": epoch_writes,
+            "memory_merges": epoch_merges,
+            "val": val,
+            "seconds": time.time() - start,
+        }
+        history.append(record)
+        with open(output_dir / "history.jsonl", "a", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+        checkpoint = {
+            "model": model.state_dict(),
+            "optimizer": optimizer.state_dict(),
+            "epoch": epoch + 1,
+            "best_value": best_value,
+        }
+        atomic_torch_save(checkpoint, output_dir / "last.pt")
+
+        print(
+            f"[val] {metric_name}={value:.5f} | base={val['base_metrics'].get(metric_name, float('nan')):.5f} "
+            f"| memory_gain={val['mean_memory_gain']:+.5f} | gate={val['mean_memory_gate']:.3f}"
+        )
+
+        # Do not early-stop on a pre-memory warmup checkpoint.
+        eligible = (not model.memory_enabled) or model.memory.ready()
+        if eligible and _better(value, best_value, metric_mode):
+            best_value = value
+            best_epoch = epoch + 1
+            bad_epochs = 0
+            checkpoint["best_value"] = best_value
+            atomic_torch_save(checkpoint, output_dir / "best.pt")
+            json_dump(val, output_dir / "best_valid_metrics.json")
+        elif eligible:
+            bad_epochs += 1
+            if bad_epochs >= patience:
+                print(f"Early stopping at epoch {epoch+1}; best epoch={best_epoch}")
+                break
+
+    best_path = output_dir / "best.pt"
+    if best_path.exists():
+        ckpt = torch.load(best_path, map_location=device)
+        model.load_state_dict(ckpt["model"])
+    test = evaluate(model, loaders["test"], device, cfg, availability_table=test_missing)
+    json_dump(test, output_dir / "test_metrics.json")
+    json_dump(history, output_dir / "history.json")
+    print(f"[test] {test['metrics']}")
+    return {"best_epoch": best_epoch, "best_value": best_value, "test": test, "history": history}

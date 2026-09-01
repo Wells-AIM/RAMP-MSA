@@ -1,0 +1,79 @@
+experiment:
+  name: ramp_synthetic_classification
+  seed: 42
+  device: cpu
+  output_dir: runs/synthetic_classification
+
+data:
+  synthetic: true
+  path: null
+  num_workers: 0
+  pin_memory: false
+  synthetic_cfg:
+    n_train: 256
+    n_valid: 96
+    n_test: 96
+    text_dim: 24
+    audio_dim: 12
+    vision_dim: 12
+    text_len: 10
+    audio_len: 14
+    vision_len: 12
+
+task:
+  type: classification
+  num_classes: 4
+
+model:
+  d_model: 48
+  nhead: 4
+  temporal_layers: 1
+  fusion_layers: 1
+  ff_mult: 2
+  dropout: 0.10
+  resampler_tokens: 4
+  interaction_dim: 48
+  max_text_tokens: 32
+  max_audio_tokens: 48
+  max_vision_tokens: 48
+
+memory:
+  enabled: true
+  num_regimes: 6
+  slots_per_regime: 12
+  key_dim: 48
+  top_regimes: 2
+  top_slots: 8
+  route_temperature: 0.15
+  slot_temperature: 0.10
+  writer_momentum: 0.99
+  initial_policy_strength: 0.25
+  oracle_view_dropout: 0.10
+  kmeans_iters: 20
+  utility_momentum: 0.95
+  stats_momentum: 0.95
+  merge_similarity: 0.90
+  merge_momentum: 0.20
+  redundancy_weight: 0.25
+  min_updates: 1
+  max_updates: 2
+
+loss:
+  final: 1.0
+  base: 0.30
+  policy: 0.20
+  route_balance: 0.002
+
+train:
+  epochs: 5
+  warmup_epochs: 1
+  batch_size: 32
+  eval_batch_size: 64
+  lr: 0.001
+  weight_decay: 0.0001
+  grad_clip: 1.0
+  amp: false
+  early_stop_patience: 5
+  lr_patience: 2
+  lr_factor: 0.5
+  min_lr: 0.000001

@@ -1,0 +1,82 @@
+experiment:
+  name: ramp_mosei
+  seed: 1111
+  device: cuda
+  output_dir: runs/mosei
+  deterministic: false
+
+data:
+  synthetic: false
+  path: /path/to/MOSEI/Processed/unaligned_50.pkl
+  num_workers: 4
+  pin_memory: true
+  keys:
+    text: text
+    audio: audio
+    vision: vision
+    label: regression_labels
+    id: id
+    audio_lengths: audio_lengths
+    vision_lengths: vision_lengths
+
+task:
+  type: regression
+
+model:
+  d_model: 128
+  nhead: 4
+  temporal_layers: 1
+  fusion_layers: 2
+  ff_mult: 4
+  dropout: 0.20
+  resampler_tokens: 4
+  interaction_dim: 128
+  max_text_tokens: 50
+  max_audio_tokens: 96
+  max_vision_tokens: 96
+
+memory:
+  enabled: true
+  num_regimes: 10
+  slots_per_regime: 48
+  key_dim: 128
+  top_regimes: 2
+  top_slots: 20
+  route_temperature: 0.12
+  slot_temperature: 0.08
+  writer_momentum: 0.995
+  initial_policy_strength: 0.20
+  oracle_view_dropout: 0.10
+  kmeans_iters: 35
+  utility_momentum: 0.97
+  stats_momentum: 0.97
+  merge_similarity: 0.92
+  merge_momentum: 0.10
+  redundancy_weight: 0.25
+  min_updates: 1
+  max_updates: 4
+  plasticity_bias: -0.7
+  plasticity_hardness: 1.0
+  plasticity_novelty: 2.0
+  plasticity_bad_gain: 1.0
+
+loss:
+  final: 1.0
+  base: 0.30
+  policy: 0.20
+  route_balance: 0.001
+
+train:
+  epochs: 30
+  warmup_epochs: 3
+  batch_size: 64
+  eval_batch_size: 128
+  lr: 0.0002
+  weight_decay: 0.0001
+  smooth_l1_beta: 0.5
+  grad_clip: 1.0
+  amp: true
+  early_stop_patience: 8
+  lr_patience: 3
+  lr_factor: 0.5
+  min_lr: 0.000001

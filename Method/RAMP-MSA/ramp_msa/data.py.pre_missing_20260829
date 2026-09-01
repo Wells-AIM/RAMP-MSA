@@ -1,0 +1,357 @@
+from __future__ import annotations
+
+import pickle
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Dict, List, Mapping, Sequence, Tuple
+
+import numpy as np
+import torch
+from torch.nn.utils.rnn import pad_sequence
+from torch.utils.data import DataLoader, Dataset
+
+
+TEXT_KEYS = ["text", "language", "text_features", "bert_features"]
+AUDIO_KEYS = ["audio", "acoustic", "audio_features"]
+VISION_KEYS = ["vision", "visual", "video", "visual_features"]
+REG_LABEL_KEYS = ["regression_labels", "sentiment", "labels", "label", "y"]
+CLS_LABEL_KEYS = ["classification_labels", "emotion_labels", "emotion", "labels", "label", "y"]
+ID_KEYS = ["id", "ids", "uid", "name"]
+
+
+@dataclass
+class DatasetInfo:
+    text_dim: int
+    audio_dim: int
+    vision_dim: int
+    num_train: int
+    num_valid: int
+    num_test: int
+
+
+def _first_key(d: Mapping[str, Any], candidates: Sequence[str], required: bool = True) -> str | None:
+    for k in candidates:
+        if k in d:
+            return k
+    if required:
+        raise KeyError(f"None of the keys {candidates} found. Available keys: {list(d.keys())}")
+    return None
+
+
+def _as_sequence(x: Any) -> np.ndarray:
+    arr = np.asarray(x)
+    if arr.ndim == 0:
+        arr = arr.reshape(1, 1)
+    elif arr.ndim == 1:
+        arr = arr.reshape(1, -1)
+    elif arr.ndim > 2:
+        # Dense pre-extracted features are expected to be [time, dim].
+        # A frequent incompatible case is text_bert token triplets [3, L].
+        arr = arr.reshape(arr.shape[0], -1)
+    return arr.astype(np.float32, copy=False)
+
+
+def _infer_valid_mask(seq: np.ndarray, explicit_length: int | None = None) -> np.ndarray:
+    if explicit_length is not None:
+        length = int(max(1, min(explicit_length, seq.shape[0])))
+        mask = np.zeros(seq.shape[0], dtype=np.bool_)
+        mask[:length] = True
+        return mask
+    if seq.shape[0] == 1:
+        return np.ones(1, dtype=np.bool_)
+    valid = np.any(np.abs(seq) > 1e-12, axis=-1)
+    if not valid.any():
+        valid[0] = True
+    return valid
+
+
+def _trim_to_mask(seq: np.ndarray, mask: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    idx = np.where(mask)[0]
+    if len(idx) == 0:
+        return seq[:1], np.ones(1, dtype=np.bool_)
+    last = int(idx[-1]) + 1
+    return seq[:last], mask[:last]
+
+
+class FeatureDataset(Dataset):
+    """Dataset for dense, pre-extracted multimodal sequence features.
+
+    Compatible with the common THUIAR/MMSA pickle structure for MOSI/MOSEI:
+      split['text'], split['audio'], split['vision'], split['regression_labels'].
+    It also accepts generic key aliases and configurable explicit keys.
+    """
+
+    def __init__(self, split: Mapping[str, Any], task_cfg: Mapping[str, Any], data_cfg: Mapping[str, Any]):
+        self.split = split
+        self.task_type = str(task_cfg.get("type", "regression"))
+        self.label_map = dict(task_cfg.get("label_map", {}) or {})
+
+        keys_cfg = data_cfg.get("keys", {})
+        self.text_key = keys_cfg.get("text") or _first_key(split, TEXT_KEYS)
+        self.audio_key = keys_cfg.get("audio") or _first_key(split, AUDIO_KEYS)
+        self.vision_key = keys_cfg.get("vision") or _first_key(split, VISION_KEYS)
+        label_candidates = REG_LABEL_KEYS if self.task_type == "regression" else CLS_LABEL_KEYS
+        self.label_key = keys_cfg.get("label") or _first_key(split, label_candidates)
+        self.id_key = keys_cfg.get("id") or _first_key(split, ID_KEYS, required=False)
+
+        self.text = split[self.text_key]
+        self.audio = split[self.audio_key]
+        self.vision = split[self.vision_key]
+        self.labels = split[self.label_key]
+        self.ids = split[self.id_key] if self.id_key else None
+        self.raw_text = split.get("raw_text", None)
+
+        n = len(self.labels)
+        if not (len(self.text) == len(self.audio) == len(self.vision) == n):
+            raise ValueError("text/audio/vision/label lengths do not match")
+
+        self.audio_lengths = split.get(keys_cfg.get("audio_lengths", "audio_lengths"), None)
+        self.vision_lengths = split.get(keys_cfg.get("vision_lengths", "vision_lengths"), None)
+        self.text_lengths = split.get(keys_cfg.get("text_lengths", "text_lengths"), None)
+
+        # Optional user-provided masks.
+        self.text_masks = split.get(keys_cfg.get("text_mask", "text_mask"), None)
+        self.audio_masks = split.get(keys_cfg.get("audio_mask", "audio_mask"), None)
+        self.vision_masks = split.get(keys_cfg.get("vision_mask", "vision_mask"), None)
+
+    def __len__(self) -> int:
+        return len(self.labels)
+
+    def _get_modality(self, data, masks, lengths, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        seq = _as_sequence(data[idx])
+        if masks is not None:
+            mask = np.asarray(masks[idx]).astype(np.bool_).reshape(-1)
+            if len(mask) != len(seq):
+                raise ValueError(f"Explicit mask length {len(mask)} != sequence length {len(seq)}")
+        else:
+            explicit_length = int(lengths[idx]) if lengths is not None else None
+            mask = _infer_valid_mask(seq, explicit_length)
+        seq, mask = _trim_to_mask(seq, mask)
+        return torch.from_numpy(seq), torch.from_numpy(mask)
+
+    def __getitem__(self, idx: int) -> Dict[str, Any]:
+        text, text_mask = self._get_modality(self.text, self.text_masks, self.text_lengths, idx)
+        audio, audio_mask = self._get_modality(self.audio, self.audio_masks, self.audio_lengths, idx)
+        vision, vision_mask = self._get_modality(self.vision, self.vision_masks, self.vision_lengths, idx)
+
+        label = np.asarray(self.labels[idx])
+        if self.task_type == "regression":
+            label = torch.tensor(float(label.reshape(-1)[0]), dtype=torch.float32)
+        else:
+            raw_label = label.reshape(-1)[0] if label.size == 1 else None
+            if raw_label is not None and isinstance(raw_label, (str, np.str_)):
+                key = str(raw_label)
+                if key not in self.label_map:
+                    raise KeyError(
+                        f"String class label '{key}' not found in task.label_map. "
+                        f"Add e.g. task.label_map: {{ang: 0, hap: 1, sad: 2, neu: 3}}"
+                    )
+                label = torch.tensor(int(self.label_map[key]), dtype=torch.long)
+            elif label.ndim > 0 and label.size > 1:
+                label = torch.tensor(int(label.argmax()), dtype=torch.long)
+            else:
+                label = torch.tensor(int(raw_label), dtype=torch.long)
+
+        sample_id = str(self.ids[idx]) if self.ids is not None else str(idx)
+        raw_text = str(self.raw_text[idx]) if self.raw_text is not None else ""
+        return {
+            "text": text,
+            "audio": audio,
+            "vision": vision,
+            "text_mask": text_mask,
+            "audio_mask": audio_mask,
+            "vision_mask": vision_mask,
+            "label": label,
+            "id": sample_id,
+            "raw_text": raw_text,
+        }
+
+    def feature_dims(self) -> Tuple[int, int, int]:
+        item = self[0]
+        return item["text"].shape[-1], item["audio"].shape[-1], item["vision"].shape[-1]
+
+
+def collate_batch(items: List[Dict[str, Any]]) -> Dict[str, Any]:
+    out: Dict[str, Any] = {}
+    for mod in ["text", "audio", "vision"]:
+        seqs = [x[mod] for x in items]
+        masks = [x[f"{mod}_mask"] for x in items]
+        out[mod] = pad_sequence(seqs, batch_first=True, padding_value=0.0)
+        out[f"{mod}_mask"] = pad_sequence(masks, batch_first=True, padding_value=False)
+    out["label"] = torch.stack([x["label"] for x in items])
+    out["id"] = [x["id"] for x in items]
+    out["raw_text"] = [x.get("raw_text", "") for x in items]
+    return out
+
+
+def _canonicalize_splits(raw: Mapping[str, Any]) -> Dict[str, Mapping[str, Any]]:
+    aliases = {
+        "train": ["train", "training"],
+        "valid": ["valid", "val", "dev", "validation"],
+        "test": ["test", "testing"],
+    }
+    result = {}
+    for canonical, names in aliases.items():
+        found = None
+        for n in names:
+            if n in raw:
+                found = raw[n]
+                break
+        if found is None:
+            raise KeyError(f"Missing split '{canonical}'. Accepted aliases: {names}. Available: {list(raw.keys())}")
+        result[canonical] = found
+    return result
+
+
+def load_feature_file(path: str | Path) -> Dict[str, Mapping[str, Any]]:
+    path = Path(path)
+    if not path.exists():
+        raise FileNotFoundError(path)
+    if path.suffix.lower() in {".pkl", ".pickle"}:
+        with open(path, "rb") as f:
+            raw = pickle.load(f)
+        if not isinstance(raw, Mapping):
+            raise TypeError("Pickle root object must be a dict-like split mapping")
+        return _canonicalize_splits(raw)
+    if path.suffix.lower() == ".npz":
+        npz = np.load(path, allow_pickle=True)
+        raw: Dict[str, Dict[str, Any]] = {"train": {}, "valid": {}, "test": {}}
+        for key in npz.files:
+            matched = False
+            for split in raw:
+                prefix = f"{split}_"
+                if key.startswith(prefix):
+                    raw[split][key[len(prefix):]] = npz[key]
+                    matched = True
+                    break
+            if not matched:
+                raise KeyError(
+                    f"NPZ key '{key}' is not split-prefixed. Expected e.g. train_text, valid_text, test_text."
+                )
+        return raw
+    raise ValueError(f"Unsupported data file: {path}. Use .pkl/.pickle or .npz")
+
+
+# ------------------------- Synthetic smoke-test data -------------------------
+
+
+def _make_synthetic_split(n: int, cfg: Mapping[str, Any], task_cfg: Mapping[str, Any], seed: int) -> Dict[str, Any]:
+    rng = np.random.default_rng(seed)
+    td = int(cfg.get("text_dim", 32))
+    ad = int(cfg.get("audio_dim", 16))
+    vd = int(cfg.get("vision_dim", 16))
+    lt = int(cfg.get("text_len", 12))
+    la = int(cfg.get("audio_len", 18))
+    lv = int(cfg.get("vision_len", 16))
+    regimes = np.asarray([
+        [1.0, 1.0, 1.0],
+        [1.0, -1.0, -1.0],
+        [-1.0, 1.0, 1.0],
+        [1.0, 1.0, -1.0],
+        [1.0, -1.0, 1.0],
+        [0.3, 1.0, 0.4],
+        [1.0, 0.25, 0.25],
+        [0.25, 0.25, 1.0],
+    ], dtype=np.float32)
+    n_reg = len(regimes)
+
+    dirs = {
+        "text": rng.normal(size=td).astype(np.float32),
+        "audio": rng.normal(size=ad).astype(np.float32),
+        "vision": rng.normal(size=vd).astype(np.float32),
+    }
+    dirs = {k: v / (np.linalg.norm(v) + 1e-8) for k, v in dirs.items()}
+    regime_emb = {
+        "text": rng.normal(scale=0.5, size=(n_reg, td)).astype(np.float32),
+        "audio": rng.normal(scale=0.5, size=(n_reg, ad)).astype(np.float32),
+        "vision": rng.normal(scale=0.5, size=(n_reg, vd)).astype(np.float32),
+    }
+
+    text, audio, vision, labels, ids = [], [], [], [], []
+    task_type = str(task_cfg.get("type", "regression"))
+    num_classes = int(task_cfg.get("num_classes", 4))
+    for i in range(n):
+        regime = int(rng.integers(0, n_reg))
+        if task_type == "regression":
+            y = float(rng.uniform(-3.0, 3.0))
+            latent = y
+            label = y
+        else:
+            label = int(rng.integers(0, num_classes))
+            centers = np.linspace(-2.5, 2.5, num_classes)
+            latent = float(centers[label] + rng.normal(scale=0.25))
+
+        def make_mod(name: str, length: int, dim: int, multiplier: float):
+            base = multiplier * latent * dirs[name] + regime_emb[name][regime]
+            seq = base[None, :] + rng.normal(scale=0.75, size=(length, dim)).astype(np.float32)
+            # Add a small temporal trend so the temporal encoder is exercised.
+            trend = np.linspace(-0.2, 0.2, length, dtype=np.float32)[:, None]
+            seq = seq + trend * dirs[name][None, :]
+            return seq.astype(np.float32)
+
+        text.append(make_mod("text", lt, td, regimes[regime, 0]))
+        audio.append(make_mod("audio", la, ad, regimes[regime, 1]))
+        vision.append(make_mod("vision", lv, vd, regimes[regime, 2]))
+        labels.append(label)
+        ids.append(f"syn_{seed}_{i}_r{regime}")
+
+    label_dtype = np.float32 if task_type == "regression" else np.int64
+    return {
+        "text": np.stack(text),
+        "audio": np.stack(audio),
+        "vision": np.stack(vision),
+        "labels": np.asarray(labels, dtype=label_dtype),
+        "id": np.asarray(ids),
+    }
+
+
+def make_synthetic_data(data_cfg: Mapping[str, Any], task_cfg: Mapping[str, Any], seed: int) -> Dict[str, Mapping[str, Any]]:
+    syn = data_cfg.get("synthetic_cfg", {})
+    return {
+        "train": _make_synthetic_split(int(syn.get("n_train", 512)), syn, task_cfg, seed),
+        "valid": _make_synthetic_split(int(syn.get("n_valid", 128)), syn, task_cfg, seed + 1),
+        "test": _make_synthetic_split(int(syn.get("n_test", 128)), syn, task_cfg, seed + 2),
+    }
+
+
+def build_dataloaders(cfg) -> Tuple[Dict[str, DataLoader], DatasetInfo]:
+    if bool(cfg.data.get("synthetic", False)):
+        splits = make_synthetic_data(cfg.data, cfg.task, int(cfg.experiment.seed))
+    else:
+        path = cfg.data.get("path", None)
+        if not path:
+            raise ValueError("data.path is empty. Set it in YAML or pass --data-path PATH")
+        splits = load_feature_file(path)
+
+    datasets = {s: FeatureDataset(splits[s], cfg.task, cfg.data) for s in ["train", "valid", "test"]}
+    td, ad, vd = datasets["train"].feature_dims()
+
+    loaders = {
+        "train": DataLoader(
+            datasets["train"],
+            batch_size=int(cfg.train.batch_size),
+            shuffle=True,
+            num_workers=int(cfg.data.get("num_workers", 0)),
+            pin_memory=bool(cfg.data.get("pin_memory", True)),
+            collate_fn=collate_batch,
+            drop_last=bool(cfg.train.get("drop_last", False)),
+        ),
+        "valid": DataLoader(
+            datasets["valid"],
+            batch_size=int(cfg.train.get("eval_batch_size", cfg.train.batch_size)),
+            shuffle=False,
+            num_workers=int(cfg.data.get("num_workers", 0)),
+            pin_memory=bool(cfg.data.get("pin_memory", True)),
+            collate_fn=collate_batch,
+        ),
+        "test": DataLoader(
+            datasets["test"],
+            batch_size=int(cfg.train.get("eval_batch_size", cfg.train.batch_size)),
+            shuffle=False,
+            num_workers=int(cfg.data.get("num_workers", 0)),
+            pin_memory=bool(cfg.data.get("pin_memory", True)),
+            collate_fn=collate_batch,
+        ),
+    }
+    info = DatasetInfo(td, ad, vd, len(datasets["train"]), len(datasets["valid"]), len(datasets["test"]))
+    return loaders, info

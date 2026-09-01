@@ -1,0 +1,79 @@
+experiment:
+  name: ramp_iemocap
+  seed: 1111
+  device: cuda
+  output_dir: runs/iemocap
+  deterministic: false
+
+data:
+  synthetic: false
+  # Expected root: {train:{text,audio,vision,labels}, valid:{...}, test:{...}}
+  # Change data.keys below to match your processed IEMOCAP feature file.
+  path: /path/to/IEMOCAP/features.pkl
+  num_workers: 4
+  pin_memory: true
+  keys:
+    text: text
+    audio: audio
+    vision: vision
+    label: labels
+    id: id
+
+task:
+  type: classification
+  # Common setup: angry / happy(or excited) / sad / neutral.
+  num_classes: 4
+
+model:
+  d_model: 128
+  nhead: 4
+  temporal_layers: 1
+  fusion_layers: 2
+  ff_mult: 4
+  dropout: 0.25
+  resampler_tokens: 4
+  interaction_dim: 128
+  max_text_tokens: 64
+  max_audio_tokens: 96
+  max_vision_tokens: 96
+
+memory:
+  enabled: true
+  num_regimes: 8
+  slots_per_regime: 32
+  key_dim: 128
+  top_regimes: 2
+  top_slots: 16
+  route_temperature: 0.12
+  slot_temperature: 0.08
+  writer_momentum: 0.995
+  initial_policy_strength: 0.20
+  oracle_view_dropout: 0.10
+  kmeans_iters: 30
+  utility_momentum: 0.95
+  stats_momentum: 0.95
+  merge_similarity: 0.90
+  merge_momentum: 0.15
+  redundancy_weight: 0.25
+  min_updates: 1
+  max_updates: 3
+
+loss:
+  final: 1.0
+  base: 0.30
+  policy: 0.20
+  route_balance: 0.001
+
+train:
+  epochs: 40
+  warmup_epochs: 5
+  batch_size: 32
+  eval_batch_size: 64
+  lr: 0.0002
+  weight_decay: 0.0001
+  grad_clip: 1.0
+  amp: true
+  early_stop_patience: 10
+  lr_patience: 3
+  lr_factor: 0.5
+  min_lr: 0.000001

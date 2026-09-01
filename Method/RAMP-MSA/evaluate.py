@@ -1,0 +1,73 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+
+import torch
+
+from ramp_msa.config import apply_overrides, load_config
+from ramp_msa.data import build_dataloaders
+from ramp_msa.model import RAMPModel
+from ramp_msa.trainer import _missing_table, evaluate
+from ramp_msa.utils import set_seed
+
+
+def parse_args():
+    p = argparse.ArgumentParser(description="Evaluate RAMP-MSA checkpoint")
+    p.add_argument("--config", required=True)
+    p.add_argument("--checkpoint", required=True)
+    p.add_argument("--data-path", default=None)
+    p.add_argument("--device", default=None)
+    p.add_argument("--drop-modality", choices=["text", "audio", "vision"], default=None)
+    p.add_argument("--noise-modality", choices=["text", "audio", "vision"], default=None)
+    p.add_argument("--noise-std", type=float, default=0.0)
+    p.add_argument("--output", default=None, help="Optional JSON result path")
+    p.add_argument("--set", action="append", default=[])
+    return p.parse_args()
+
+
+def main():
+    args = parse_args()
+    cfg = apply_overrides(load_config(args.config), args.set)
+    if args.data_path:
+        cfg.data.path = args.data_path
+        cfg.data.synthetic = False
+    set_seed(int(cfg.experiment.seed))
+    device_str = args.device or cfg.experiment.get("device", "cuda")
+    if str(device_str).startswith("cuda") and not torch.cuda.is_available():
+        device_str = "cpu"
+    device = torch.device(device_str)
+
+    loaders, info = build_dataloaders(cfg)
+    model = RAMPModel(info.text_dim, info.audio_dim, info.vision_dim, cfg).to(device)
+    ckpt = torch.load(args.checkpoint, map_location=device)
+    state = ckpt["model"] if isinstance(ckpt, dict) and "model" in ckpt else ckpt
+    model.load_state_dict(state)
+
+    corruption = {
+        "drop_modality": args.drop_modality,
+        "noise_modality": args.noise_modality,
+        "noise_std": args.noise_std,
+    }
+    corruption = {k: v for k, v in corruption.items() if v is not None and v != 0.0}
+    missing = _missing_table(cfg, loaders["test"], "test", 0, device)
+    result = evaluate(
+        model,
+        loaders["test"],
+        device,
+        cfg,
+        corruption=corruption,
+        availability_table=missing,
+    )
+    payload = json.dumps(result, indent=2, ensure_ascii=False)
+    if args.output:
+        destination = Path(args.output)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(payload + "\n", encoding="utf-8")
+    print(payload)
+
+
+if __name__ == "__main__":
+    main()

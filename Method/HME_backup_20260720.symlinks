@@ -1,0 +1,9 @@
+BERT_en/config.json -> bert-base-uncased/config.json
+BERT_en/model.safetensors -> bert-base-uncased/model.safetensors
+BERT_en/pytorch_model.bin -> bert-base-uncased/pytorch_model.bin
+BERT_en/tokenizer.json -> bert-base-uncased/tokenizer.json
+BERT_en/tokenizer_config.json -> bert-base-uncased/tokenizer_config.json
+BERT_en/vocab.txt -> bert-base-uncased/vocab.txt
+datasets/aligned_iemocap.pkl -> /media/disk3/muxy/Dataset/Method/Method/aligned_iemocap.pkl
+datasets/aligned_mosei.pkl -> /media/disk3/muxy/Dataset/Method/Method/aligned_mosei.pkl
+datasets/aligned_mosi.pkl -> /media/disk3/muxy/Dataset/Method/Method/aligned_mosi.pkl

@@ -1,0 +1,9 @@
+START mosi full seed=1701 gpu=0 2026-08-29T21:18:56+08:00
+DONE mosi full seed=1701 gpu=0 2026-08-29T21:19:29+08:00
+START mosi g_only seed=1701 gpu=0 2026-08-29T21:19:29+08:00
+DONE mosi g_only seed=1701 gpu=0 2026-08-29T21:20:02+08:00
+START mosei full seed=1701 gpu=0 2026-08-29T21:20:02+08:00
+DONE mosei full seed=1701 gpu=0 2026-08-29T21:22:32+08:00
+START mosei g_only seed=1701 gpu=0 2026-08-29T21:22:32+08:00
+DONE mosei g_only seed=1701 gpu=0 2026-08-29T21:26:10+08:00
+WORKER_COMPLETE seed=1701 gpu=0 2026-08-29T21:26:10+08:00

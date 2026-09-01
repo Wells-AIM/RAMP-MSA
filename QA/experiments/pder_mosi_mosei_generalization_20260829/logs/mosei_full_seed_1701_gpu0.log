@@ -1,0 +1,115 @@
+{"epoch": 1, "train_loss": 0.6308260039788689, "train_acc": 0.5844673862036602, "valid": {"acc2_nonzero": 0.8414464534075105, "f1_positive": 0.877155172413793, "f1_macro": 0.8268128803245436, "precision_positive": 0.8809523809523809, "recall_positive": 0.8733905579399142, "confusion_matrix": [[396, 110], [118, 814]], "n": 1438, "positive_rate": 0.6481223922114048, "predicted_positive_rate": 0.6425591098748261, "mean_positive_probability": 0.6093085725767141, "diagnostics": {"pder_schedule_progress": 0.0, "pder_evidence_timing_code": 0.0, "pder_consensus_gate_mean": 0.1826066662867864, "pder_consensus_update_norm_ratio": 0.0, "pder_consensus_effective_scale": 0.0, "pder_complement_gate_mean": 0.1826066662867864, "pder_complement_update_norm_ratio": 0.0, "pder_complement_effective_scale": 0.0, "pder_text_register_unit_valid_ratio": 0.999999996026357, "pder_text_register_consensus_norm": 15.987017567952474, "pder_text_register_complement_norm": 15.987017059326172, "pder_audio_register_unit_valid_ratio": 0.999999996026357, "pder_audio_register_consensus_norm": 15.987017504374187, "pder_audio_register_complement_norm": 15.987014770507812}}, "lr": 0.0002948888739433602}
+{"epoch": 2, "train_loss": 0.4370504247364669, "train_acc": 0.8274675426247459, "valid": {"acc2_nonzero": 0.8504867872044506, "f1_positive": 0.8869016307206733, "f1_macro": 0.8331944051039264, "precision_positive": 0.8699690402476781, "recall_positive": 0.9045064377682404, "confusion_matrix": [[380, 126], [89, 843]], "n": 1438, "positive_rate": 0.6481223922114048, "predicted_positive_rate": 0.6738525730180807, "mean_positive_probability": 0.671409680177775, "diagnostics": {"pder_schedule_progress": 0.3333333432674408, "pder_evidence_timing_code": 0.0, "pder_consensus_gate_mean": 0.14157145321369172, "pder_consensus_update_norm_ratio": 0.0020056848259021836, "pder_consensus_effective_scale": 0.02666666731238365, "pder_complement_gate_mean": 0.17468290030956268, "pder_complement_update_norm_ratio": 0.0047531639536221824, "pder_complement_effective_scale": 0.019999999552965164, "pder_text_register_unit_valid_ratio": 0.999999996026357, "pder_text_register_consensus_norm": 15.906309954325359, "pder_text_register_complement_norm": 15.977451960245768, "pder_audio_register_unit_valid_ratio": 0.999999996026357, "pder_audio_register_consensus_norm": 15.907487614949543, "pder_audio_register_complement_norm": 16.081204477945963}}, "lr": 0.0002799038105676658}
+{"epoch": 3, "train_loss": 0.3945683261728354, "train_acc": 0.8510871265446582, "valid": {"acc2_nonzero": 0.825452016689847, "f1_positive": 0.8576290414066932, "f1_macro": 0.8160562098318281, "precision_positive": 0.9097472924187726, "recall_positive": 0.8111587982832618, "confusion_matrix": [[431, 75], [176, 756]], "n": 1438, "positive_rate": 0.6481223922114048, "predicted_positive_rate": 0.5778859527121002, "mean_positive_probability": 0.5661691501348051, "diagnostics": {"pder_schedule_progress": 0.6666666865348816, "pder_evidence_timing_code": 0.0, "pder_consensus_gate_mean": 0.09831466178099314, "pder_consensus_update_norm_ratio": 0.004183515378584465, "pder_consensus_effective_scale": 0.0533333346247673, "pder_complement_gate_mean": 0.1701039363940557, "pder_complement_update_norm_ratio": 0.011776128597557545, "pder_complement_effective_scale": 0.03999999910593033, "pder_text_register_unit_valid_ratio": 0.999999996026357, "pder_text_register_consensus_norm": 15.860283279418946, "pder_text_register_complement_norm": 15.996179644266764, "pder_audio_register_unit_valid_ratio": 0.999999996026357, "pder_audio_register_consensus_norm": 15.849364407857259, "pder_audio_register_complement_norm": 16.066216150919598}}, "lr": 0.00025606601717798207}
+{"epoch": 4, "train_loss": 0.3652883960237418, "train_acc": 0.867824182699828, "valid": {"acc2_nonzero": 0.8484005563282336, "f1_positive": 0.8850210970464135, "f1_macro": 0.8312860587272883, "precision_positive": 0.8703319502074689, "recall_positive": 0.9002145922746781, "confusion_matrix": [[381, 125], [93, 839]], "n": 1438, "positive_rate": 0.6481223922114048, "predicted_positive_rate": 0.6703755215577191, "mean_positive_probability": 0.6624101135039103, "diagnostics": {"pder_schedule_progress": 1.0, "pder_evidence_timing_code": 0.0, "pder_consensus_gate_mean": 0.058245434612035754, "pder_consensus_update_norm_ratio": 0.007415777662148079, "pder_consensus_effective_scale": 0.07999999821186066, "pder_complement_gate_mean": 0.16643796364466348, "pder_complement_update_norm_ratio": 0.01472593160967032, "pder_complement_effective_scale": 0.05999999865889549, "pder_text_register_unit_valid_ratio": 0.999999996026357, "pder_text_register_consensus_norm": 15.813729667663575, "pder_text_register_complement_norm": 15.956002362569173, "pder_audio_register_unit_valid_ratio": 0.999999996026357, "pder_audio_register_consensus_norm": 15.808512369791666, "pder_audio_register_complement_norm": 16.008928934733074}}, "lr": 0.00022499999999999997}
+{"epoch": 5, "train_loss": 0.338842892691542, "train_acc": 0.8878460816518067, "valid": {"acc2_nonzero": 0.8393602225312935, "f1_positive": 0.8710217755443886, "f1_macro": 0.8290592748689685, "precision_positive": 0.9080325960419092, "recall_positive": 0.8369098712446352, "confusion_matrix": [[427, 79], [152, 780]], "n": 1438, "positive_rate": 0.6481223922114048, "predicted_positive_rate": 0.5973574408901252, "mean_positive_probability": 0.5896634564181901, "diagnostics": {"pder_schedule_progress": 1.0, "pder_evidence_timing_code": 0.0, "pder_consensus_gate_mean": 0.04004482055703799, "pder_consensus_update_norm_ratio": 0.009826046538849671, "pder_consensus_effective_scale": 0.07999999821186066, "pder_complement_gate_mean": 0.15565740764141084, "pder_complement_update_norm_ratio": 0.01297040469944477, "pder_complement_effective_scale": 0.05999999865889549, "pder_text_register_unit_valid_ratio": 0.999999996026357, "pder_text_register_consensus_norm": 15.788758468627929, "pder_text_register_complement_norm": 15.920009422302247, "pder_audio_register_unit_valid_ratio": 0.999999996026357, "pder_audio_register_consensus_norm": 15.778750356038412, "pder_audio_register_complement_norm": 15.961881192525228}}, "lr": 0.0001888228567653781}
+{"epoch": 6, "train_loss": 0.3096673008856892, "train_acc": 0.905834506491475, "valid": {"acc2_nonzero": 0.8414464534075105, "f1_positive": 0.8774193548387097, "f1_macro": 0.826504953009906, "precision_positive": 0.8793103448275862, "recall_positive": 0.8755364806866953, "confusion_matrix": [[394, 112], [116, 816]], "n": 1438, "positive_rate": 0.6481223922114048, "predicted_positive_rate": 0.6453407510431154, "mean_positive_probability": 0.626648847542843, "diagnostics": {"pder_schedule_progress": 1.0, "pder_evidence_timing_code": 0.0, "pder_consensus_gate_mean": 0.03967988565564155, "pder_consensus_update_norm_ratio": 0.010416716895997524, "pder_consensus_effective_scale": 0.07999999821186066, "pder_complement_gate_mean": 0.1598727991183599, "pder_complement_update_norm_ratio": 0.014120610244572163, "pder_complement_effective_scale": 0.05999999865889549, "pder_text_register_unit_valid_ratio": 0.999999996026357, "pder_text_register_consensus_norm": 15.77663377126058, "pder_text_register_complement_norm": 15.910095469156902, "pder_audio_register_unit_valid_ratio": 0.999999996026357, "pder_audio_register_consensus_norm": 15.774456723531086, "pder_audio_register_complement_norm": 15.973455429077148}}, "lr": 0.00015}
+{
+  "dataset": "mosei",
+  "variant": "full",
+  "seed": 1701,
+  "protocol": "official split, nonzero sentiment binary classification",
+  "modalities": "frozen BERT text plus train-normalized concatenated audio-vision evidence",
+  "best_epoch": 2,
+  "elapsed_seconds": 145.01024079322815,
+  "split_sizes": {
+    "train": 12786,
+    "valid": 1438,
+    "test": 3634
+  },
+  "class_counts_train": [
+    4738,
+    8048
+  ],
+  "valid": {
+    "acc2_nonzero": 0.8504867872044506,
+    "f1_positive": 0.8869016307206733,
+    "f1_macro": 0.8331944051039264,
+    "precision_positive": 0.8699690402476781,
+    "recall_positive": 0.9045064377682404,
+    "confusion_matrix": [
+      [
+        380,
+        126
+      ],
+      [
+        89,
+        843
+      ]
+    ],
+    "n": 1438,
+    "positive_rate": 0.6481223922114048,
+    "predicted_positive_rate": 0.6738525730180807,
+    "mean_positive_probability": 0.671409680177775,
+    "diagnostics": {
+      "pder_schedule_progress": 0.3333333432674408,
+      "pder_evidence_timing_code": 0.0,
+      "pder_consensus_gate_mean": 0.14157145321369172,
+      "pder_consensus_update_norm_ratio": 0.0020056848259021836,
+      "pder_consensus_effective_scale": 0.02666666731238365,
+      "pder_complement_gate_mean": 0.17468290030956268,
+      "pder_complement_update_norm_ratio": 0.0047531639536221824,
+      "pder_complement_effective_scale": 0.019999999552965164,
+      "pder_text_register_unit_valid_ratio": 0.999999996026357,
+      "pder_text_register_consensus_norm": 15.906309954325359,
+      "pder_text_register_complement_norm": 15.977451960245768,
+      "pder_audio_register_unit_valid_ratio": 0.999999996026357,
+      "pder_audio_register_consensus_norm": 15.907487614949543,
+      "pder_audio_register_complement_norm": 16.081204477945963
+    }
+  },
+  "test": {
+    "acc2_nonzero": 0.8475509080902587,
+    "f1_positive": 0.8821777966822628,
+    "f1_macro": 0.8331387814276474,
+    "precision_positive": 0.8577336641852771,
+    "recall_positive": 0.9080560420315237,
+    "confusion_matrix": [
+      [
+        1006,
+        344
+      ],
+      [
+        210,
+        2074
+      ]
+    ],
+    "n": 3634,
+    "positive_rate": 0.6285085305448541,
+    "predicted_positive_rate": 0.6653824986241057,
+    "mean_positive_probability": 0.6552163473718446,
+    "diagnostics": {
+      "pder_schedule_progress": 0.3333333432674408,
+      "pder_evidence_timing_code": 0.0,
+      "pder_consensus_gate_mean": 0.14154337346553802,
+      "pder_consensus_update_norm_ratio": 0.0020083128781008875,
+      "pder_consensus_effective_scale": 0.02666666731238365,
+      "pder_complement_gate_mean": 0.17468400848539253,
+      "pder_complement_update_norm_ratio": 0.0047552358530657856,
+      "pder_complement_effective_scale": 0.019999999552965164,
+      "pder_text_register_unit_valid_ratio": 0.9999999984314567,
+      "pder_text_register_consensus_norm": 15.90633359708284,
+      "pder_text_register_complement_norm": 15.977448839890329,
+      "pder_audio_register_unit_valid_ratio": 0.9999999984314567,
+      "pder_audio_register_consensus_norm": 15.907461768702456,
+      "pder_audio_register_complement_norm": 16.081270870409515
+    }
+  },
+  "args": {
+    "dataset": "mosei",
+    "data": "/media/disk3/muxy/Dataset/Method/Method/aligned_mosei_ramp_bert.pkl",
+    "base_config": "configs/eatd_pder_full.json",
+    "variant": "full",
+    "seed": 1701,
+    "output_dir": "/media/disk3/muxy/QA/experiments/pder_mosi_mosei_generalization_20260829/mosei/full/seed_1701",
+    "device": "cuda:0",
+    "epochs": 12,
+    "patience": 4,
+    "batch_size": 96,
+    "lr": 0.0003,
+    "weight_decay": 0.02,
+    "max_length": 50,
+    "num_workers": 0,
+    "smoke": false
+  }
+}

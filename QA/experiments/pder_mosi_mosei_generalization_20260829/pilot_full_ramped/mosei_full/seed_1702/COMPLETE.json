@@ -1,0 +1,109 @@
+{
+  "dataset": "mosei",
+  "variant": "full",
+  "seed": 1702,
+  "protocol": "official split, nonzero sentiment binary classification",
+  "modalities": "frozen BERT text plus train-normalized concatenated audio-vision evidence",
+  "best_epoch": 9,
+  "elapsed_seconds": 342.6731412410736,
+  "split_sizes": {
+    "train": 12786,
+    "valid": 1438,
+    "test": 3634
+  },
+  "class_counts_train": [
+    4738,
+    8048
+  ],
+  "valid": {
+    "acc2_nonzero": 0.8518776077885952,
+    "f1_positive": 0.8851752021563343,
+    "f1_macro": 0.8382781005884512,
+    "precision_positive": 0.8894907908992417,
+    "recall_positive": 0.880901287553648,
+    "confusion_matrix": [
+      [
+        404,
+        102
+      ],
+      [
+        111,
+        821
+      ]
+    ],
+    "n": 1438,
+    "positive_rate": 0.6481223922114048,
+    "predicted_positive_rate": 0.6418636995827538,
+    "mean_positive_probability": 0.6241519739974409,
+    "diagnostics": {
+      "pder_schedule_progress": 1.0,
+      "pder_evidence_timing_code": 0.0,
+      "pder_consensus_gate_mean": 0.08524947663148244,
+      "pder_consensus_update_norm_ratio": 0.008347367743651073,
+      "pder_consensus_effective_scale": 0.07999999821186066,
+      "pder_complement_gate_mean": 0.16336709360281626,
+      "pder_complement_update_norm_ratio": 0.014983453725775083,
+      "pder_complement_effective_scale": 0.05999999865889549,
+      "pder_text_register_unit_valid_ratio": 0.999999996026357,
+      "pder_text_register_consensus_norm": 15.771443176269532,
+      "pder_text_register_complement_norm": 15.945621172587076,
+      "pder_audio_register_unit_valid_ratio": 0.999999996026357,
+      "pder_audio_register_consensus_norm": 15.755429140726726,
+      "pder_audio_register_complement_norm": 15.90418275197347
+    }
+  },
+  "test": {
+    "acc2_nonzero": 0.833516785910842,
+    "f1_positive": 0.8669452386188695,
+    "f1_macro": 0.822300256207634,
+    "precision_positive": 0.8709677419354839,
+    "recall_positive": 0.8629597197898424,
+    "confusion_matrix": [
+      [
+        1058,
+        292
+      ],
+      [
+        313,
+        1971
+      ]
+    ],
+    "n": 3634,
+    "positive_rate": 0.6285085305448541,
+    "predicted_positive_rate": 0.6227297743533297,
+    "mean_positive_probability": 0.6008703501118028,
+    "diagnostics": {
+      "pder_schedule_progress": 1.0,
+      "pder_evidence_timing_code": 0.0,
+      "pder_consensus_gate_mean": 0.08546043952044688,
+      "pder_consensus_update_norm_ratio": 0.008308420987113527,
+      "pder_consensus_effective_scale": 0.07999999821186066,
+      "pder_complement_gate_mean": 0.1634238327020093,
+      "pder_complement_update_norm_ratio": 0.014823734319131626,
+      "pder_complement_effective_scale": 0.05999999865889549,
+      "pder_text_register_unit_valid_ratio": 0.9999999984314567,
+      "pder_text_register_consensus_norm": 15.771617086310135,
+      "pder_text_register_complement_norm": 15.945637100621274,
+      "pder_audio_register_unit_valid_ratio": 0.9999999984314567,
+      "pder_audio_register_consensus_norm": 15.755598871331467,
+      "pder_audio_register_complement_norm": 15.90430716464394
+    }
+  },
+  "args": {
+    "dataset": "mosei",
+    "data": "/media/disk3/muxy/Dataset/Method/Method/aligned_mosei_ramp_bert.pkl",
+    "base_config": "configs/eatd_pder_full.json",
+    "variant": "full",
+    "seed": 1702,
+    "output_dir": "/media/disk3/muxy/QA/experiments/pder_mosi_mosei_generalization_20260829/mosei/full/seed_1702",
+    "device": "cuda:0",
+    "epochs": 12,
+    "patience": 4,
+    "batch_size": 96,
+    "lr": 0.0003,
+    "weight_decay": 0.02,
+    "max_length": 50,
+    "num_workers": 0,
+    "smoke": false
+  }
+}
