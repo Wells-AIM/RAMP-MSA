@@ -61,6 +61,7 @@ class ALPNet(nn.Module):
         # A/V values; the text tokens fed to the fusion layer never reach the output token).
         # text_residual adds a direct text path: y = W [LN(fused); LN(mean text tokens)].
         self.text_residual = getattr(m, 'text_residual', False)
+        self.text_residual_drop = getattr(m, 'text_residual_drop', 0.0)
         if self.text_residual:
             self.norm_feat, self.norm_text = nn.LayerNorm(D), nn.LayerNorm(D)
             self.regression_layer = nn.Linear(2 * D, 1)
@@ -107,7 +108,13 @@ class ALPNet(nn.Module):
         h_hyper = self.h_hyper_layer(h_t_list, h_a, h_v, h_hyper, mask_a=mask_a, mask_v=mask_v, times=times)
         feat = self.fusion_layer(h_hyper, h_t_list[-1])[:, 0]
         if self.text_residual:
-            feat = torch.cat([self.norm_feat(feat), self.norm_text(h_t_list[-1].mean(1))], -1)
+            t_feat = self.norm_text(h_t_list[-1].mean(1))
+            if self.training and self.text_residual_drop > 0:
+                # anti-shortcut: per-sample dropout of the direct text path, so the A/V-grounded
+                # hyper-token path must carry the prediction on its own
+                keep = (torch.rand(b, 1, device=t_feat.device) >= self.text_residual_drop).to(t_feat.dtype)
+                t_feat = t_feat * keep
+            feat = torch.cat([self.norm_feat(feat), t_feat], -1)
         out = self.regression_layer(feat)
         if return_aux:
             return out, {'l': aux_l, 'a': aux_a, 'v': aux_v}

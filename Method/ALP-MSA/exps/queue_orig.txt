@@ -1,0 +1,21 @@
+# Queue v3 (2026-09-29 01:00): back to the ORIGINAL ALMT backbone.
+# text_residual made every A/V tokenizer insensitive to A/V resampling on raw features
+# (text shortcut: A/V ignored), so tokenizer comparisons must not use it.
+#
+# (1) RQ1 on MOSI raw frame-level features (WavLM 50 Hz, CLIP face 10 fps), original backbone
+mosi_raw_almt       configs/mosi_raw.yaml
+mosi_raw_query      configs/mosi_raw.yaml model.audio_mode=query   model.vision_mode=query
+mosi_raw_frame      configs/mosi_raw.yaml model.audio_mode=frame   model.vision_mode=frame
+mosi_raw_uniform    configs/mosi_raw.yaml model.audio_mode=uniform model.vision_mode=uniform
+mosi_raw_dynamic    configs/mosi_raw.yaml model.audio_mode=dynamic model.vision_mode=dynamic
+mosi_raw_dyn_all    configs/mosi_raw.yaml model.text_mode=dynamic model.audio_mode=dynamic model.vision_mode=dynamic
+# anti-shortcut test: direct text path with per-sample dropout 0.5
+mosi_raw_trd_dynamic configs/mosi_raw.yaml model.text_residual=true model.text_residual_drop=0.5 model.audio_mode=dynamic model.vision_mode=dynamic
+mosi_raw_trd_almt    configs/mosi_raw.yaml model.text_residual=true model.text_residual_drop=0.5
+# (2) RQ1 on MOSEI, original backbone (mosei_almt_orig seed 1111 already running from queue v2)
+mosei_almt_orig     configs/mosei.yaml
+mosei_query         configs/mosei.yaml model.audio_mode=query   model.vision_mode=query
+mosei_uniform       configs/mosei.yaml model.audio_mode=uniform model.vision_mode=uniform
+mosei_dynamic       configs/mosei.yaml model.audio_mode=dynamic model.vision_mode=dynamic
+mosei_dyn_all       configs/mosei.yaml model.text_mode=dynamic model.audio_mode=dynamic model.vision_mode=dynamic
+mosei_frame         configs/mosei.yaml model.audio_mode=frame   model.vision_mode=frame

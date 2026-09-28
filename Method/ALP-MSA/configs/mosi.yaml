@@ -52,6 +52,7 @@ model:
   time_bias_init: 2.0    # initial gamma (learned per head)
   av_gate: false         # zero-init tanh gate on the A/V -> hyper-token update (text-first warm start)
   text_residual: false   # direct text path to the regressor (ALMT output only sees hyper tokens)
+  text_residual_drop: 0.0 # train-time per-sample dropout of the direct text path (anti text-shortcut)
 
   l_enc_heads: 8
   l_enc_mlp_dim: 128

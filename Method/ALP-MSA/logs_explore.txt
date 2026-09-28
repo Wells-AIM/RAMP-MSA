@@ -1,2 +1,10 @@
 21 jobs
 00:00:10 start ex_dyn_all 1111 gpu 2
+00:07:24 start ex_dyn_all 2222 gpu 0
+00:08:44 start ex_dyn_all 3333 gpu 1
+00:09:34 start ex_dyn_all_blr 1111 gpu 0
+00:10:55 start ex_dyn_all_blr 2222 gpu 1
+00:24:36 start ex_dyn_all_blr 3333 gpu 2
+00:33:27 start ex_dyn_all_warp 1111 gpu 0
+00:35:37 start ex_dyn_all_warp 2222 gpu 1
+00:47:37 start ex_dyn_all_warp 3333 gpu 2

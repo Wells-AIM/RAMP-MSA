@@ -1,0 +1,7 @@
+# Screening v2 on MOSI-MMSA, ORIGINAL backbone (reference: mosi_dyn_all, 5 seeds, 84.24 Acc2).
+ex2_dyn_all_blr       configs/mosi.yaml model.text_mode=dynamic model.audio_mode=dynamic model.vision_mode=dynamic base.bert_lr=2e-5
+ex2_dyn_all_warp      configs/mosi.yaml model.text_mode=dynamic model.audio_mode=dynamic model.vision_mode=dynamic base.time_warp=[0.7,1.4]
+ex2_dyn_all_warpcons  configs/mosi.yaml model.text_mode=dynamic model.audio_mode=dynamic model.vision_mode=dynamic base.time_warp=[0.7,1.4] base.warp_consistency=1.0
+ex2_dyn_all_full      configs/mosi.yaml model.text_mode=dynamic model.audio_mode=dynamic model.vision_mode=dynamic base.bert_lr=2e-5 base.time_warp=[0.7,1.4] base.warp_consistency=1.0
+ex2_almt_full         configs/mosi.yaml base.bert_lr=2e-5 base.time_warp=[0.7,1.4] base.warp_consistency=1.0
+ex2_uniform_full      configs/mosi.yaml model.text_mode=uniform model.audio_mode=uniform model.vision_mode=uniform base.bert_lr=2e-5 base.time_warp=[0.7,1.4] base.warp_consistency=1.0
