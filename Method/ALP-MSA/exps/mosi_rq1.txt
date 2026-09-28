@@ -1,0 +1,6 @@
+# RQ1 on MOSI: how should A/V frames be tokenised?  (text stays ALMT-style)
+mosi_almt      configs/mosi.yaml
+mosi_query     configs/mosi.yaml model.audio_mode=query   model.vision_mode=query
+mosi_frame     configs/mosi.yaml model.audio_mode=frame   model.vision_mode=frame
+mosi_uniform   configs/mosi.yaml model.audio_mode=uniform model.vision_mode=uniform
+mosi_dynamic   configs/mosi.yaml model.audio_mode=dynamic model.vision_mode=dynamic

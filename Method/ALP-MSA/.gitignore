@@ -3,3 +3,4 @@ __pycache__/
 *.pt
 *.npy
 logs/
+logs_grid*.txt

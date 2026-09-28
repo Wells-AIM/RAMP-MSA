@@ -8,10 +8,25 @@ from torch.utils.data import Dataset, DataLoader
 _CACHE = {}
 
 
+def _load_npy_dir(path):
+    """Directory written by tools/prepare_npy.py -> {split: {key: memmapped array}}."""
+    import json
+    import os
+    meta = json.load(open(os.path.join(path, 'meta.json')))
+    data = {}
+    for split, keys in meta.items():
+        data[split] = {k: np.load(os.path.join(path, f'{split}_{k}.npy'), mmap_mode='r') for k in keys}
+        data[split]['id'] = json.load(open(os.path.join(path, f'{split}_id.json')))
+    return data
+
+
 def _load(path):
     if path not in _CACHE:
-        with open(path, 'rb') as f:
-            _CACHE[path] = pickle.load(f)
+        if path.endswith('.pkl'):
+            with open(path, 'rb') as f:
+                _CACHE[path] = pickle.load(f)
+        else:
+            _CACHE[path] = _load_npy_dir(path)
     return _CACHE[path]
 
 
@@ -27,11 +42,14 @@ def _lengths(split, key, feats):
 class MMDataset(Dataset):
     def __init__(self, cfg, mode):
         split = _load(cfg.dataset.dataPath)[mode]
-        self.text = split['text_bert'].astype(np.float32)
-        self.vision = split['vision'].astype(np.float32)
-        self.audio = split['audio'].astype(np.float32)
-        self.audio[~np.isfinite(self.audio)] = 0
-        self.vision[~np.isfinite(self.vision)] = 0
+        if isinstance(split['audio'], np.memmap):   # prepared by tools/prepare_npy.py (already clean float32)
+            self.text, self.vision, self.audio = split['text_bert'], split['vision'], split['audio']
+        else:
+            self.text = split['text_bert'].astype(np.float32)
+            self.vision = split['vision'].astype(np.float32)
+            self.audio = split['audio'].astype(np.float32)
+            self.audio[~np.isfinite(self.audio)] = 0
+            self.vision[~np.isfinite(self.vision)] = 0
         self.audio_len = _lengths(split, 'audio_lengths', self.audio)
         self.vision_len = _lengths(split, 'vision_lengths', self.vision)
         self.labels = split['regression_labels'].astype(np.float32)
@@ -43,9 +61,9 @@ class MMDataset(Dataset):
     def __getitem__(self, i):
         la, lv = self.audio.shape[1], self.vision.shape[1]
         return {
-            'text': torch.from_numpy(self.text[i]),
-            'audio': torch.from_numpy(self.audio[i]),
-            'vision': torch.from_numpy(self.vision[i]),
+            'text': torch.from_numpy(np.array(self.text[i], dtype=np.float32)),
+            'audio': torch.from_numpy(np.array(self.audio[i], dtype=np.float32)),
+            'vision': torch.from_numpy(np.array(self.vision[i], dtype=np.float32)),
             'audio_mask': torch.arange(la) < int(self.audio_len[i]),
             'vision_mask': torch.arange(lv) < int(self.vision_len[i]),
             'label': torch.tensor([self.labels[i]]),

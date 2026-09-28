@@ -1,0 +1,55 @@
+# CMU-MOSEI (unaligned, MMSA features, memory-mapped npy from tools/prepare_npy.py). ALMT mosei.yaml hyper-parameters;
+# n_epochs reduced 200 -> 50 (16k training samples; 200 epochs = ~2h/run).
+base:
+  run_root: runs
+  lr: 0.0001
+  bert_lr: null          # null -> same as lr (ALMT default)
+  weight_decay: 0.0001
+  batch_size: 64
+  n_epochs: 50
+  num_workers: 4
+  grad_clip: 0.0
+  key_eval: MAE          # validation metric used for model selection
+  log_every: 2
+  save_ckpt: false
+
+dataset:
+  datasetName: mosei
+  dataPath: /media/disk3/muxy/Dataset/MSA_unaligned/MOSEI/npy
+
+model:
+  bert_pretrained: /media/disk3/muxy/Method/HME/BERT_en/bert-base-uncased
+
+  # tokenizer per modality: almt | query | frame | uniform | dynamic
+  text_mode: almt
+  audio_mode: almt
+  vision_mode: almt
+
+  l_input_dim: 768
+  a_input_dim: 74
+  v_input_dim: 35
+  l_input_length: 50
+  a_input_length: 500
+  v_input_length: 500
+
+  token_len: 8
+  token_dim: 128
+  proj_depth: 1
+  proj_heads: 8
+  proj_mlp_dim: 128
+
+  # Affective Latent Patching
+  patch_depth: 1
+  patch_tau: 0.25
+  boundary_min: 0.05
+  use_raw_cue: true
+
+  l_enc_heads: 8
+  l_enc_mlp_dim: 128
+  AHL_depth: 3
+  ahl_heads: 8
+  ahl_dim_head: 16
+  ahl_droup: 0.0
+  fusion_heads: 8
+  fusion_mlp_dim: 128
+  fusion_layer_depth: 4
