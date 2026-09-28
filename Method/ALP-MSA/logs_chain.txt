@@ -25,3 +25,9 @@
 23:21:33 start mosi_uni_all_tb 3333 gpu 1
 23:22:24 start mosi_uni_all_tb 4444 gpu 0
 23:36:14 start mosi_uni_all_tb 5555 gpu 2
+ALL DONE
+23:48:35 chain: ALL DONE
+23:48:35 chain: exps/mosei_rq1.txt
+48 jobs
+23:48:35 start mosi_raw_almt 1111 gpu 0
+23:49:05 start mosi_raw_almt 2222 gpu 0

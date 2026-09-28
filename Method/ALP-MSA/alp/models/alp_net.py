@@ -57,6 +57,18 @@ class ALPNet(nn.Module):
                                              mlp_dim=m.fusion_mlp_dim)
         self.regression_layer = nn.Linear(D, 1)
 
+        # ALMT's prediction only sees the hyper tokens (text acts solely as attention queries over
+        # A/V values; the text tokens fed to the fusion layer never reach the output token).
+        # text_residual adds a direct text path: y = W [LN(fused); LN(mean text tokens)].
+        self.text_residual = getattr(m, 'text_residual', False)
+        if self.text_residual:
+            self.norm_feat, self.norm_text = nn.LayerNorm(D), nn.LayerNorm(D)
+            self.regression_layer = nn.Linear(2 * D, 1)
+
+        if getattr(m, 'av_gate', False):
+            for layer in self.h_hyper_layer.layers:
+                layer.fn.use_gate = True
+
         # event-synchronous fusion (relative-time bias between text and A/V tokens)
         self.time_bias = getattr(m, 'time_bias', False)
         if self.time_bias:
@@ -94,6 +106,8 @@ class ALPNet(nn.Module):
         h_t_list = self.l_encoder(h_l)
         h_hyper = self.h_hyper_layer(h_t_list, h_a, h_v, h_hyper, mask_a=mask_a, mask_v=mask_v, times=times)
         feat = self.fusion_layer(h_hyper, h_t_list[-1])[:, 0]
+        if self.text_residual:
+            feat = torch.cat([self.norm_feat(feat), self.norm_text(h_t_list[-1].mean(1))], -1)
         out = self.regression_layer(feat)
         if return_aux:
             return out, {'l': aux_l, 'a': aux_a, 'v': aux_v}

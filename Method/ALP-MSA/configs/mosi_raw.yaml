@@ -48,6 +48,8 @@ model:
   event_weight: 0.0      # event-coherence loss weight (dynamic tokenizers only)
   time_bias: false       # event-synchronous fusion: -gamma*|t_text - t_av| in text->A/V attention
   time_bias_init: 2.0    # initial gamma (learned per head)
+  av_gate: false         # zero-init tanh gate on the A/V -> hyper-token update (text-first warm start)
+  text_residual: false   # direct text path to the regressor (ALMT output only sees hyper tokens)
 
   l_enc_heads: 8
   l_enc_mlp_dim: 128

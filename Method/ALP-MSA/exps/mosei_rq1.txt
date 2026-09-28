@@ -1,21 +1,28 @@
 # Queue read by the running chain after stage B (seeds 1111,2222,3333).
-# (1) RQ1 on MOSI with raw frame-level features (WavLM 50 Hz audio, CLIP face 10 fps): the setting
-#     where the granularity mismatch is real -- run first.
-mosi_raw_almt       configs/mosi_raw.yaml
-mosi_raw_query      configs/mosi_raw.yaml model.audio_mode=query   model.vision_mode=query
-mosi_raw_frame      configs/mosi_raw.yaml model.audio_mode=frame   model.vision_mode=frame
-mosi_raw_uniform    configs/mosi_raw.yaml model.audio_mode=uniform model.vision_mode=uniform
-mosi_raw_dynamic    configs/mosi_raw.yaml model.audio_mode=dynamic model.vision_mode=dynamic
-mosi_raw_dyn_all    configs/mosi_raw.yaml model.text_mode=dynamic model.audio_mode=dynamic model.vision_mode=dynamic
-mosi_raw_dyn_all_tb configs/mosi_raw.yaml model.text_mode=dynamic model.audio_mode=dynamic model.vision_mode=dynamic model.time_bias=true
+# All tokenizer comparisons below use the improved backbone (model.text_residual=true: direct text path
+# to the regressor; in original ALMT the prediction only sees the hyper tokens). One original-ALMT
+# reference line per dataset.
+#
+# (1) RQ1 on MOSI with raw frame-level features (WavLM 50 Hz audio, CLIP face 10 fps)
+mosi_raw_almt_orig     configs/mosi_raw.yaml
+mosi_raw_tr_almt       configs/mosi_raw.yaml model.text_residual=true
+mosi_raw_tr_query      configs/mosi_raw.yaml model.text_residual=true model.audio_mode=query   model.vision_mode=query
+mosi_raw_tr_frame      configs/mosi_raw.yaml model.text_residual=true model.audio_mode=frame   model.vision_mode=frame
+mosi_raw_tr_uniform    configs/mosi_raw.yaml model.text_residual=true model.audio_mode=uniform model.vision_mode=uniform
+mosi_raw_tr_dynamic    configs/mosi_raw.yaml model.text_residual=true model.audio_mode=dynamic model.vision_mode=dynamic
+mosi_raw_tr_dyn_all    configs/mosi_raw.yaml model.text_residual=true model.text_mode=dynamic model.audio_mode=dynamic model.vision_mode=dynamic
+mosi_raw_tr_dyn_all_tb configs/mosi_raw.yaml model.text_residual=true model.text_mode=dynamic model.audio_mode=dynamic model.vision_mode=dynamic model.time_bias=true
 # (2) RQ1 on MOSEI (MMSA features, 4x longer sequences than MOSI-MMSA)
-mosei_almt      configs/mosei.yaml
-mosei_query     configs/mosei.yaml model.audio_mode=query   model.vision_mode=query
-mosei_uniform   configs/mosei.yaml model.audio_mode=uniform model.vision_mode=uniform
-mosei_dynamic   configs/mosei.yaml model.audio_mode=dynamic model.vision_mode=dynamic
-mosei_dyn_all   configs/mosei.yaml model.text_mode=dynamic model.audio_mode=dynamic model.vision_mode=dynamic
-mosei_frame     configs/mosei.yaml model.audio_mode=frame   model.vision_mode=frame
-# (3) frame-rate robustness for MOSI-MMSA baselines (RQ1 baseline runs predate robust_eval)
-mosi_almt_r     configs/mosi.yaml
-mosi_query_r    configs/mosi.yaml model.audio_mode=query model.vision_mode=query
-mosi_frame_r    configs/mosi.yaml model.audio_mode=frame model.vision_mode=frame
+mosei_almt_orig    configs/mosei.yaml
+mosei_tr_almt      configs/mosei.yaml model.text_residual=true
+mosei_tr_query     configs/mosei.yaml model.text_residual=true model.audio_mode=query   model.vision_mode=query
+mosei_tr_uniform   configs/mosei.yaml model.text_residual=true model.audio_mode=uniform model.vision_mode=uniform
+mosei_tr_dynamic   configs/mosei.yaml model.text_residual=true model.audio_mode=dynamic model.vision_mode=dynamic
+mosei_tr_dyn_all   configs/mosei.yaml model.text_residual=true model.text_mode=dynamic model.audio_mode=dynamic model.vision_mode=dynamic
+mosei_tr_frame     configs/mosei.yaml model.text_residual=true model.audio_mode=frame   model.vision_mode=frame
+# (3) MOSI-MMSA with the improved backbone (+ robustness for all)
+mosi_tr_almt       configs/mosi.yaml model.text_residual=true
+mosi_tr_uniform    configs/mosi.yaml model.text_residual=true model.audio_mode=uniform model.vision_mode=uniform
+mosi_tr_dynamic    configs/mosi.yaml model.text_residual=true model.audio_mode=dynamic model.vision_mode=dynamic
+mosi_tr_dyn_all    configs/mosi.yaml model.text_residual=true model.text_mode=dynamic model.audio_mode=dynamic model.vision_mode=dynamic
+mosi_tr_frame      configs/mosi.yaml model.text_residual=true model.audio_mode=frame   model.vision_mode=frame

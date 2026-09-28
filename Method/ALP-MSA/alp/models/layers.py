@@ -126,8 +126,13 @@ class HhyperLearningLayer(nn.Module):
         # when `times` is given.  gamma = GAMMA_SCALE * raw so it can move on the O(1-10) scale.
         self.gamma_a = nn.Parameter(torch.zeros(heads))
         self.gamma_v = nn.Parameter(torch.zeros(heads))
+        # optional zero-initialised tanh gate on the A/V update (Flamingo-style warm start):
+        # the model starts text-only and opens the A/V pathway as training proceeds
+        self.use_gate = False
+        self.av_gate = nn.Parameter(torch.zeros(1))
 
     GAMMA_SCALE = 10.0
+    GATE_SCALE = 10.0
 
     def _time_bias(self, gamma, t_q, t_k):
         # gamma: (h,), t_q: (b, i), t_k: (b, j) in [0, 1] -> (b, h, i, j)
@@ -150,7 +155,10 @@ class HhyperLearningLayer(nn.Module):
         out_ta = rearrange(_sdpa(q, k_ta, v_ta, mask_a, bias_a), 'b h n d -> b n (h d)')
         out_tv = rearrange(_sdpa(q, k_tv, v_tv, mask_v, bias_v), 'b h n d -> b n (h d)')
 
-        return h_hyper + self.to_out(out_ta + out_tv)
+        shift = self.to_out(out_ta + out_tv)
+        if self.use_gate:
+            shift = torch.tanh(self.GATE_SCALE * self.av_gate) * shift
+        return h_hyper + shift
 
 
 class HhyperLearningEncoder(nn.Module):
