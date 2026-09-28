@@ -1,0 +1,10 @@
+18 jobs
+01:03:15 start ex2_dyn_all_blr 1111 gpu 1
+01:08:17 start ex2_dyn_all_blr 2222 gpu 0
+01:10:58 start ex2_dyn_all_blr 3333 gpu 2
+01:26:39 start ex2_dyn_all_warp 1111 gpu 1
+01:31:09 start ex2_dyn_all_warp 2222 gpu 0
+01:39:10 start ex2_dyn_all_warp 3333 gpu 2
+01:50:10 start ex2_dyn_all_warpcons 1111 gpu 1
+01:54:21 start ex2_dyn_all_warpcons 2222 gpu 0
+02:08:22 start ex2_dyn_all_warpcons 3333 gpu 2

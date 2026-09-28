@@ -1,0 +1,16 @@
+# Queue v4 (2026-09-29 02:10): Event-Query Patching.
+# Pooled patch tokens (frame/uniform/dynamic) collapse on raw features with the original backbone,
+# learnable-query tokens (almt/query) train well -> tokens = K learnable queries whose receptive field
+# is their (fixed | event) patch: uniq / dynq. frame_pos_std=1.0 follows ALMT's pos-emb init.
+#
+# (1) MOSI raw features (WavLM 50 Hz / CLIP 10 fps), original backbone, 80 epochs
+q_raw_uniq        configs/mosi_raw.yaml model.frame_pos_std=1.0 model.audio_mode=uniq model.vision_mode=uniq
+q_raw_dynq        configs/mosi_raw.yaml model.frame_pos_std=1.0 model.audio_mode=dynq model.vision_mode=dynq
+q_raw_dynq_all    configs/mosi_raw.yaml model.frame_pos_std=1.0 model.text_mode=dynq model.audio_mode=dynq model.vision_mode=dynq
+# (2) MOSEI, original backbone (mosei_almt_orig / mosei_query come from queue v3)
+mosei_query       configs/mosei.yaml model.audio_mode=query model.vision_mode=query
+q_mosei_uniq      configs/mosei.yaml model.frame_pos_std=1.0 model.audio_mode=uniq model.vision_mode=uniq
+q_mosei_dynq      configs/mosei.yaml model.frame_pos_std=1.0 model.audio_mode=dynq model.vision_mode=dynq
+# (3) MOSI-MMSA, original backbone, 200 epochs (reference: mosi_almt 83.23, mosi_query 83.63, mosi_dyn_all 84.24)
+q_mmsa_uniq       configs/mosi.yaml model.frame_pos_std=1.0 model.audio_mode=uniq model.vision_mode=uniq
+q_mmsa_dynq       configs/mosi.yaml model.frame_pos_std=1.0 model.audio_mode=dynq model.vision_mode=dynq

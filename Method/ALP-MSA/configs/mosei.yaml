@@ -48,6 +48,7 @@ model:
   patch_tau: 0.25
   boundary_min: 0.05
   use_raw_cue: true
+  frame_pos_std: 0.02    # init std of frame pos-emb in frame/patch tokenizers (ALMT uses 1.0)
   event_weight: 0.0      # event-coherence loss weight (dynamic tokenizers only)
   time_bias: false       # event-synchronous fusion: -gamma*|t_text - t_av| in text->A/V attention
   time_bias_init: 2.0    # initial gamma (learned per head)

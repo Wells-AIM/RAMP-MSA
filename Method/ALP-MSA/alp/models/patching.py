@@ -23,16 +23,17 @@ import torch.nn.functional as F
 from torch import nn
 from einops import repeat
 
-from .layers import Transformer, TransformerEncoder
+from .layers import (Attention, FeedForward, PreNormAttention, PreNormForward, Transformer,
+                     TransformerEncoder)
 
 
 class FrameEncoder(nn.Module):
     """Linear projection + learned positions + masked transformer over frames."""
 
-    def __init__(self, in_dim, dim, max_len, depth, heads, mlp_dim, dropout=0.):
+    def __init__(self, in_dim, dim, max_len, depth, heads, mlp_dim, dropout=0., pos_std=0.02):
         super().__init__()
         self.proj = nn.Linear(in_dim, dim)
-        self.pos = nn.Parameter(torch.randn(1, max_len, dim) * 0.02)
+        self.pos = nn.Parameter(torch.randn(1, max_len, dim) * pos_std)   # ALMT uses std 1
         self.encoder = TransformerEncoder(dim, depth, heads, 64, mlp_dim, dropout)
 
     def forward(self, x, mask):
@@ -42,11 +43,13 @@ class FrameEncoder(nn.Module):
 
 class AffectivePatcher(nn.Module):
     def __init__(self, mode, in_dim, dim, num_tokens, max_len, depth=1, heads=8, mlp_dim=128,
-                 patch_depth=1, tau=0.25, b_min=0.05, use_raw_cue=True, dropout=0.):
+                 patch_depth=1, tau=0.25, b_min=0.05, use_raw_cue=True, dropout=0., frame_pos_std=0.02):
         super().__init__()
-        assert mode in ('almt', 'query', 'frame', 'uniform', 'dynamic'), mode
+        assert mode in ('almt', 'query', 'frame', 'uniform', 'dynamic', 'uniq', 'dynq'), mode
         self.mode, self.K, self.tau, self.b_min = mode, num_tokens, tau, b_min
         self.use_raw_cue = use_raw_cue
+        self.is_dyn = mode in ('dynamic', 'dynq')      # learned event boundaries
+        self.is_query = mode in ('uniq', 'dynq')       # tokens = learnable queries with patch receptive fields
 
         if mode == 'almt':
             self.net = nn.Sequential(
@@ -60,16 +63,24 @@ class AffectivePatcher(nn.Module):
                                    dim=dim, depth=depth, heads=heads, mlp_dim=mlp_dim)
             return
 
-        self.frame_enc = FrameEncoder(in_dim, dim, max_len, depth, heads, mlp_dim, dropout)
+        self.frame_enc = FrameEncoder(in_dim, dim, max_len, depth, heads, mlp_dim, dropout, frame_pos_std)
         if mode == 'frame':
             return
 
-        # patch-level modules (uniform + dynamic)
+        # patch-level modules (uniform / dynamic / uniq / dynq)
         self.patch_pos = nn.Parameter(torch.randn(1, num_tokens, dim) * 0.02)
         self.desc_proj = nn.Linear(3, dim)          # duration, temporal centre, boundary strength
         self.patch_enc = TransformerEncoder(dim, patch_depth, heads, 64, mlp_dim, dropout)
 
-        if mode == 'dynamic':
+        if self.is_query:
+            # event queries: K learnable queries, query k attends to the frames with bias
+            # bias_scale * log w(t, k) (+ salience), i.e. its receptive field is its (event) patch
+            self.queries = nn.Parameter(torch.randn(1, num_tokens, dim))   # std 1 as ALMT token pos-emb: stable early token space
+            self.q_attn = PreNormAttention(dim, Attention(dim, heads=heads, dim_head=64, dropout=dropout))
+            self.q_ff = PreNormForward(dim, FeedForward(dim, mlp_dim, dropout=dropout))
+            self.bias_scale = nn.Parameter(torch.tensor(1.0))
+
+        if self.is_dyn:
             self.to_q = nn.Linear(dim, dim, bias=False)
             self.to_k = nn.Linear(dim, dim, bias=False)
             self.cos_scale = nn.Parameter(torch.tensor(1.0))
@@ -83,7 +94,7 @@ class AffectivePatcher(nn.Module):
     def _boundaries(self, x, h, m):
         """Return boundary strength b in [b_min, 1], shape (B, L); padding -> 0."""
         B, L, _ = h.shape
-        if self.mode == 'uniform':
+        if not self.is_dyn:
             return m.clone()
         q, k = self.to_q(h), self.to_k(h)
         cos = F.cosine_similarity(q[:, 1:], k[:, :-1], dim=-1)           # (B, L-1)
@@ -156,11 +167,19 @@ class AffectivePatcher(nn.Module):
 
         m = mask.to(h.dtype)
         b = self._boundaries(x, h, m)
-        sal = self.salience(h).squeeze(-1) if self.mode == 'dynamic' else None
+        sal = self.salience(h).squeeze(-1) if self.is_dyn else None
         tokens, desc, w, a_norm = self._pool(h, m, b, sal)
-        tokens = tokens + self.patch_pos + self.desc_proj(desc)
+        if self.is_query:
+            bias = self.bias_scale * torch.log(w.clamp(min=1e-4)).transpose(1, 2)   # (B, K, L)
+            if sal is not None:
+                bias = bias + sal.unsqueeze(1)
+            q0 = self.queries + self.patch_pos + self.desc_proj(desc)
+            tokens = q0 + self.q_attn(q0, h, h, mask=mask, bias=bias.unsqueeze(1))
+            tokens = tokens + self.q_ff(tokens)
+        else:
+            tokens = tokens + self.patch_pos + self.desc_proj(desc)
         tokens = self.patch_enc(tokens)
         aux = {'boundary': b, 'assign': w, 'desc': desc}
-        if self.mode == 'dynamic':
+        if self.is_dyn:
             aux['event_loss'] = self._event_loss(h, m, w, a_norm)
         return tokens, None, aux

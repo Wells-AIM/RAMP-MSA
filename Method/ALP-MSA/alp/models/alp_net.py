@@ -41,7 +41,8 @@ class ALPNet(nn.Module):
         def patcher(mode, in_dim, max_len):
             return AffectivePatcher(mode, in_dim, D, K, max_len, depth=m.proj_depth, heads=m.proj_heads,
                                     mlp_dim=m.proj_mlp_dim, patch_depth=m.patch_depth, tau=m.patch_tau,
-                                    b_min=m.boundary_min, use_raw_cue=m.use_raw_cue)
+                                    b_min=m.boundary_min, use_raw_cue=m.use_raw_cue,
+                                    frame_pos_std=getattr(m, "frame_pos_std", 0.02))
 
         assert m.text_mode != 'frame', 'text tokens act as AHL queries and must be compressed to K tokens'
         self.tok_l = patcher(m.text_mode, m.l_input_dim, m.l_input_length)
@@ -73,7 +74,7 @@ class ALPNet(nn.Module):
         # event-synchronous fusion (relative-time bias between text and A/V tokens)
         self.time_bias = getattr(m, 'time_bias', False)
         if self.time_bias:
-            timed = ('uniform', 'dynamic')
+            timed = ('uniform', 'dynamic', 'uniq', 'dynq')
             assert m.text_mode in timed, 'time_bias needs timed text tokens (text_mode uniform|dynamic)'
             assert m.audio_mode in timed + ('frame',) and m.vision_mode in timed + ('frame',)
             init = m.time_bias_init / HhyperLearningLayerScale

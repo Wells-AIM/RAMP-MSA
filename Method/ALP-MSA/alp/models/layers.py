@@ -47,8 +47,8 @@ class PreNormAttention(nn.Module):
         self.norm_v = nn.LayerNorm(dim)
         self.fn = fn
 
-    def forward(self, q, k, v, mask=None):
-        return self.fn(self.norm_q(q), self.norm_k(k), self.norm_v(v), mask=mask)
+    def forward(self, q, k, v, mask=None, bias=None):
+        return self.fn(self.norm_q(q), self.norm_k(k), self.norm_v(v), mask=mask, bias=bias)
 
 
 class PreNormAHL(nn.Module):
@@ -96,11 +96,11 @@ class Attention(nn.Module):
             nn.Dropout(dropout)
         ) if project_out else nn.Identity()
 
-    def forward(self, q, k, v, mask=None):
+    def forward(self, q, k, v, mask=None, bias=None):
         h = self.heads
         q, k, v = self.to_q(q), self.to_k(k), self.to_v(v)
         q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> b h n d', h=h), (q, k, v))
-        out = rearrange(_sdpa(q, k, v, mask), 'b h n d -> b n (h d)')
+        out = rearrange(_sdpa(q, k, v, mask, bias), 'b h n d -> b n (h d)')
         return self.to_out(out)
 
 
