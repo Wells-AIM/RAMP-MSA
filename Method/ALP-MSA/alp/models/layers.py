@@ -11,15 +11,22 @@ With mask=None all modules behave exactly like the original ALMT code.
 """
 
 import torch
+import torch.nn.functional as F
 from torch import nn, einsum
 from einops import rearrange, repeat
 
 
-def _apply_key_mask(dots, mask):
-    # dots: (b, h, i, j); mask: (b, j) bool, True = keep
-    if mask is None:
-        return dots
-    return dots.masked_fill(~mask[:, None, None, :], torch.finfo(dots.dtype).min)
+def _sdpa(q, k, v, mask=None, bias=None):
+    """softmax(q k^T / sqrt(d) + bias, keys masked) v via the memory-efficient SDPA kernel.
+    q, k, v: (b, h, n, d); mask: (b, j) bool, True = keep; bias: (b, h, i, j) additive or None."""
+    attn_mask = None
+    if bias is not None:
+        attn_mask = bias
+        if mask is not None:
+            attn_mask = attn_mask.masked_fill(~mask[:, None, None, :], float('-inf'))
+    elif mask is not None:
+        attn_mask = mask[:, None, None, :]
+    return F.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask)
 
 
 class PreNormForward(nn.Module):
@@ -93,10 +100,7 @@ class Attention(nn.Module):
         h = self.heads
         q, k, v = self.to_q(q), self.to_k(k), self.to_v(v)
         q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> b h n d', h=h), (q, k, v))
-        dots = einsum('b h i d, b h j d -> b h i j', q, k) * self.scale
-        attn = self.attend(_apply_key_mask(dots, mask))
-        out = einsum('b h i j, b h j d -> b h i d', attn, v)
-        out = rearrange(out, 'b h n d -> b n (h d)')
+        out = rearrange(_sdpa(q, k, v, mask), 'b h n d -> b n (h d)')
         return self.to_out(out)
 
 
@@ -138,18 +142,13 @@ class HhyperLearningLayer(nn.Module):
         q, k_ta, k_tv, v_ta, v_tv = map(lambda t: rearrange(t, 'b n (h d) -> b h n d', h=h),
                                         (q, k_ta, k_tv, v_ta, v_tv))
 
-        dots_ta = einsum('b h i d, b h j d -> b h i j', q, k_ta) * self.scale
-        dots_tv = einsum('b h i d, b h j d -> b h i j', q, k_tv) * self.scale
+        bias_a = bias_v = None
         if times is not None:
             t_l, t_a, t_v = times
-            dots_ta = dots_ta + self._time_bias(self.gamma_a, t_l, t_a)
-            dots_tv = dots_tv + self._time_bias(self.gamma_v, t_l, t_v)
-
-        attn_ta = self.attend(_apply_key_mask(dots_ta, mask_a))
-        out_ta = rearrange(einsum('b h i j, b h j d -> b h i d', attn_ta, v_ta), 'b h n d -> b n (h d)')
-
-        attn_tv = self.attend(_apply_key_mask(dots_tv, mask_v))
-        out_tv = rearrange(einsum('b h i j, b h j d -> b h i d', attn_tv, v_tv), 'b h n d -> b n (h d)')
+            bias_a = self._time_bias(self.gamma_a, t_l, t_a).to(q.dtype)
+            bias_v = self._time_bias(self.gamma_v, t_l, t_v).to(q.dtype)
+        out_ta = rearrange(_sdpa(q, k_ta, v_ta, mask_a, bias_a), 'b h n d -> b n (h d)')
+        out_tv = rearrange(_sdpa(q, k_tv, v_tv, mask_v, bias_v), 'b h n d -> b n (h d)')
 
         return h_hyper + self.to_out(out_ta + out_tv)
 

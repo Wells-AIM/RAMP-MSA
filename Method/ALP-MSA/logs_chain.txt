@@ -1,0 +1,27 @@
+22:07:47 chain: exps/mosi_stageB.txt
+25 jobs
+22:07:48 start mosi_dyn_all 1111 gpu 0
+22:08:18 start mosi_dyn_all 2222 gpu 0
+22:08:48 start mosi_dyn_all 3333 gpu 1
+22:09:18 start mosi_dyn_all 4444 gpu 1
+22:09:48 start mosi_dyn_all 5555 gpu 2
+22:10:18 start mosi_dyn_all_tb 1111 gpu 2
+22:30:19 start mosi_dyn_all_tb 2222 gpu 0
+22:30:49 start mosi_dyn_all_tb 3333 gpu 1
+22:31:29 start mosi_dyn_all_tb 4444 gpu 0
+22:32:19 start mosi_dyn_all_tb 5555 gpu 2
+22:33:10 start mosi_dyn_all_ev 1111 gpu 2
+22:33:50 start mosi_dyn_all_ev 2222 gpu 1
+22:53:11 start mosi_dyn_all_ev 3333 gpu 0
+22:53:41 start mosi_dyn_all_ev 4444 gpu 1
+22:56:01 start mosi_dyn_all_ev 5555 gpu 2
+22:56:31 start mosi_dyn_all_tb_ev 1111 gpu 2
+22:57:12 start mosi_dyn_all_tb_ev 2222 gpu 0
+22:57:42 start mosi_dyn_all_tb_ev 3333 gpu 1
+23:16:43 start mosi_dyn_all_tb_ev 4444 gpu 0
+23:17:53 start mosi_dyn_all_tb_ev 5555 gpu 1
+23:19:23 start mosi_uni_all_tb 1111 gpu 2
+23:20:03 start mosi_uni_all_tb 2222 gpu 2
+23:21:33 start mosi_uni_all_tb 3333 gpu 1
+23:22:24 start mosi_uni_all_tb 4444 gpu 0
+23:36:14 start mosi_uni_all_tb 5555 gpu 2

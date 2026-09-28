@@ -1,0 +1,60 @@
+# CMU-MOSI with frame-level features re-extracted from raw video (tools/raw): WavLM-base+ 50 Hz audio (768-d),
+# CLIP ViT-B/32 face embeddings at 10 fps (512-d). Text / labels / splits unchanged (MMSA).
+base:
+  run_root: runs
+  lr: 0.0001
+  bert_lr: null          # null -> same as lr (ALMT default)
+  weight_decay: 0.0001
+  batch_size: 64
+  n_epochs: 80           # 200 in the MMSA configs; raw features are ~10x slower/epoch, MOSI best epochs were 26-141
+  num_workers: 4
+  grad_clip: 0.0
+  key_eval: MAE          # validation metric used for model selection
+  log_every: 10
+  save_ckpt: false
+  robust_eval: [0.5, 0.75, 1.5, 2.0]   # test-time A/V temporal resampling factors (selected epoch only)
+
+dataset:
+  datasetName: mosi
+  input_norm: false      # per-dim A/V standardisation with train statistics (valid frames)
+  dataPath: /media/disk3/muxy/Dataset/MSA_raw_feats/MOSI/wavlm_clip_npy
+
+model:
+  bert_pretrained: /media/disk3/muxy/Method/HME/BERT_en/bert-base-uncased
+
+  # tokenizer per modality: almt | query | frame | uniform | dynamic
+  text_mode: almt
+  audio_mode: almt
+  vision_mode: almt
+
+  l_input_dim: 768
+  a_input_dim: 768
+  v_input_dim: 512
+  l_input_length: 50
+  a_input_length: 1000
+  v_input_length: 300
+
+  token_len: 8
+  token_dim: 128
+  proj_depth: 1
+  proj_heads: 8
+  proj_mlp_dim: 128
+
+  # Affective Latent Patching
+  patch_depth: 1
+  patch_tau: 0.25
+  boundary_min: 0.05
+  use_raw_cue: true
+  event_weight: 0.0      # event-coherence loss weight (dynamic tokenizers only)
+  time_bias: false       # event-synchronous fusion: -gamma*|t_text - t_av| in text->A/V attention
+  time_bias_init: 2.0    # initial gamma (learned per head)
+
+  l_enc_heads: 8
+  l_enc_mlp_dim: 128
+  AHL_depth: 3
+  ahl_heads: 8
+  ahl_dim_head: 16
+  ahl_droup: 0.0
+  fusion_heads: 8
+  fusion_mlp_dim: 128
+  fusion_layer_depth: 2

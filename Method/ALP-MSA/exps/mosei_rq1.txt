@@ -1,7 +1,21 @@
-# RQ1 on MOSEI (main benchmark: 4x longer A/V sequences than MOSI)
+# Queue read by the running chain after stage B (seeds 1111,2222,3333).
+# (1) RQ1 on MOSI with raw frame-level features (WavLM 50 Hz audio, CLIP face 10 fps): the setting
+#     where the granularity mismatch is real -- run first.
+mosi_raw_almt       configs/mosi_raw.yaml
+mosi_raw_query      configs/mosi_raw.yaml model.audio_mode=query   model.vision_mode=query
+mosi_raw_frame      configs/mosi_raw.yaml model.audio_mode=frame   model.vision_mode=frame
+mosi_raw_uniform    configs/mosi_raw.yaml model.audio_mode=uniform model.vision_mode=uniform
+mosi_raw_dynamic    configs/mosi_raw.yaml model.audio_mode=dynamic model.vision_mode=dynamic
+mosi_raw_dyn_all    configs/mosi_raw.yaml model.text_mode=dynamic model.audio_mode=dynamic model.vision_mode=dynamic
+mosi_raw_dyn_all_tb configs/mosi_raw.yaml model.text_mode=dynamic model.audio_mode=dynamic model.vision_mode=dynamic model.time_bias=true
+# (2) RQ1 on MOSEI (MMSA features, 4x longer sequences than MOSI-MMSA)
 mosei_almt      configs/mosei.yaml
 mosei_query     configs/mosei.yaml model.audio_mode=query   model.vision_mode=query
 mosei_uniform   configs/mosei.yaml model.audio_mode=uniform model.vision_mode=uniform
 mosei_dynamic   configs/mosei.yaml model.audio_mode=dynamic model.vision_mode=dynamic
-mosei_dyn_all_tb_ev configs/mosei.yaml model.text_mode=dynamic model.audio_mode=dynamic model.vision_mode=dynamic model.time_bias=true model.event_weight=0.1
+mosei_dyn_all   configs/mosei.yaml model.text_mode=dynamic model.audio_mode=dynamic model.vision_mode=dynamic
 mosei_frame     configs/mosei.yaml model.audio_mode=frame   model.vision_mode=frame
+# (3) frame-rate robustness for MOSI-MMSA baselines (RQ1 baseline runs predate robust_eval)
+mosi_almt_r     configs/mosi.yaml
+mosi_query_r    configs/mosi.yaml model.audio_mode=query model.vision_mode=query
+mosi_frame_r    configs/mosi.yaml model.audio_mode=frame model.vision_mode=frame

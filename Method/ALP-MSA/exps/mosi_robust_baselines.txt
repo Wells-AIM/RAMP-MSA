@@ -1,0 +1,4 @@
+# frame-rate robustness for baselines (RQ1 baseline runs predate robust_eval)
+mosi_almt_r     configs/mosi.yaml
+mosi_query_r    configs/mosi.yaml model.audio_mode=query model.vision_mode=query
+mosi_frame_r    configs/mosi.yaml model.audio_mode=frame model.vision_mode=frame
