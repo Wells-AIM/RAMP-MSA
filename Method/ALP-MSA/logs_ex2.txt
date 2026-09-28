@@ -8,3 +8,13 @@
 01:50:10 start ex2_dyn_all_warpcons 1111 gpu 1
 01:54:21 start ex2_dyn_all_warpcons 2222 gpu 0
 02:08:22 start ex2_dyn_all_warpcons 3333 gpu 2
+02:32:43 start ex2_dyn_all_full 1111 gpu 1
+02:35:14 start ex2_dyn_all_full 2222 gpu 0
+02:58:25 start ex2_dyn_all_full 3333 gpu 2
+03:16:16 start ex2_almt_full 1111 gpu 1
+03:18:16 start ex2_almt_full 2222 gpu 0
+03:46:08 start ex2_almt_full 3333 gpu 2
+04:01:29 start ex2_uniform_full 1111 gpu 1
+04:02:49 start ex2_uniform_full 2222 gpu 0
+04:30:31 start ex2_uniform_full 3333 gpu 2
+ALL DONE

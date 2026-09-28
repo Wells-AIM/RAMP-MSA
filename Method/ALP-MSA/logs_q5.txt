@@ -1,0 +1,4 @@
+37 jobs
+05:42:22 start q_raw_dynq 1111 gpu 0
+05:42:52 start q_raw_dynq 3333 gpu 0
+05:43:22 start q_raw_dynq_all 3333 gpu 1

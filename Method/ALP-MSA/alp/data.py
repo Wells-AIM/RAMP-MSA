@@ -55,6 +55,7 @@ class MMDataset(Dataset):
         self.labels = np.asarray(split['regression_labels'], dtype=np.float32)
         self.ids = list(split['id'])
         self.norm = None
+        self.drop = set(getattr(cfg.dataset, 'drop_modalities', None) or [])
 
     def __len__(self):
         return len(self.labels)
@@ -72,6 +73,12 @@ class MMDataset(Dataset):
         vm = torch.arange(lv) < int(self.vision_len[i])
         audio = np.array(self.audio[i], dtype=np.float32)
         vision = np.array(self.vision[i], dtype=np.float32)
+        if 'audio' in self.drop:        # modality removed for training and testing (unimodal baselines)
+            audio[:] = 0
+            am = torch.arange(la) < 1
+        if 'vision' in self.drop:
+            vision[:] = 0
+            vm = torch.arange(lv) < 1
         if self.norm is not None:
             audio = (audio - self.norm['audio'][0]) / self.norm['audio'][1] * am.numpy()[:, None]
             vision = (vision - self.norm['vision'][0]) / self.norm['vision'][1] * vm.numpy()[:, None]

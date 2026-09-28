@@ -40,6 +40,25 @@ def main(root='runs', pattern='*'):
             mae = {f: np.mean([r['selected']['test_resampled'][f]['MAE'] for r in res]) for f in fs}
             base = np.mean([r['selected']['test']['Non0_acc_2'] for r in res]) * 100
             rob.append((os.path.basename(d), len(res), base, acc, mae))
+    # test-time modality ablation (reliance on A/V)
+    abl = []
+    for d in sorted(glob.glob(os.path.join(root, pattern))):
+        res = [json.load(open(f)) for f in sorted(glob.glob(os.path.join(d, 'seed_*', 'result.json')))]
+        res = [r for r in res if 'test_ablated' in r['selected']]
+        if res:
+            full = np.mean([r['selected']['test']['Non0_acc_2'] for r in res]) * 100
+            full_mae = np.mean([r['selected']['test']['MAE'] for r in res])
+            cells = {k: (np.mean([r['selected']['test_ablated'][k]['Non0_acc_2'] for r in res]) * 100,
+                         np.mean([r['selected']['test_ablated'][k]['MAE'] for r in res]))
+                     for k in ('no_audio', 'no_vision', 'no_av')}
+            abl.append((os.path.basename(d), len(res), full, full_mae, cells))
+    if abl:
+        print('\ntest-time modality ablation: Non0_acc_2 (MAE)')
+        print(f'{"run":34s} {"n":>2s} {"full":>15s} {"no_audio":>15s} {"no_vision":>15s} {"no_av":>15s}')
+        for name, n, full, fm, c in abl:
+            print(f'{name:34s} {n:2d} {full:6.2f} ({fm:.3f}) ' +
+                  ' '.join(f'{c[k][0]:6.2f} ({c[k][1]:.3f})' for k in ('no_audio', 'no_vision', 'no_av')))
+
     if rob:
         fs = list(rob[0][3])
         print('\nframe-rate robustness: Non0_acc_2 (MAE) of test A/V resampled by factor')

@@ -16,10 +16,12 @@ base:
   time_warp: null        # e.g. [0.7, 1.4]: train-time A/V temporal resampling factor range
   warp_prob: 0.5         # per-sample warp probability (augmentation mode)
   warp_consistency: 0.0  # >0: two views + ||f(x)-f(warp x)||^2 granularity-consistency loss
+  ablate_eval: false     # at the selected epoch also test with audio / vision / both removed
 
 dataset:
   datasetName: mosi
   input_norm: false      # per-dim A/V standardisation with train statistics (valid frames)
+  drop_modalities: []    # e.g. [audio, vision] -> text-only baseline (removed in train and test)
   dataPath: /media/disk3/muxy/Dataset/MSA_raw_feats/MOSI/wavlm_clip_npy
 
 model:

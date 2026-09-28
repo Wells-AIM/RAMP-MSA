@@ -1,0 +1,20 @@
+# Queue v5 (2026-09-29 05:45). Single scheduler (earlier parallel schedulers caused OOM seed losses).
+# (1) seeds lost to OOM in queue v4 (identical names/overrides -> existing seeds are skipped)
+q_raw_dynq        configs/mosi_raw.yaml model.frame_pos_std=1.0 model.audio_mode=dynq model.vision_mode=dynq
+q_raw_dynq_all    configs/mosi_raw.yaml model.frame_pos_std=1.0 model.text_mode=dynq model.audio_mode=dynq model.vision_mode=dynq
+q_mosei_uniq      configs/mosei.yaml model.frame_pos_std=1.0 model.audio_mode=uniq model.vision_mode=uniq
+# (2) diagnostics: how much do A/V matter at all?
+#   text-only (A/V removed in training and test)
+d_mmsa_textonly   configs/mosi.yaml     dataset.drop_modalities=[audio,vision]
+d_raw_textonly    configs/mosi_raw.yaml dataset.drop_modalities=[audio,vision]
+d_mosei_textonly  configs/mosei.yaml    dataset.drop_modalities=[audio,vision]
+#   test-time modality ablation of trained models
+d_mosei_almt      configs/mosei.yaml base.ablate_eval=true
+d_mosei_dynq      configs/mosei.yaml base.ablate_eval=true model.frame_pos_std=1.0 model.audio_mode=dynq model.vision_mode=dynq
+d_raw_almt        configs/mosi_raw.yaml base.ablate_eval=true
+d_raw_dynq_all    configs/mosi_raw.yaml base.ablate_eval=true model.frame_pos_std=1.0 model.text_mode=dynq model.audio_mode=dynq model.vision_mode=dynq
+d_mmsa_almt       configs/mosi.yaml base.ablate_eval=true
+d_mmsa_dyn_all    configs/mosi.yaml base.ablate_eval=true model.text_mode=dynamic model.audio_mode=dynamic model.vision_mode=dynamic
+# (3) most promising combination: event queries + time-warp + granularity-consistency loss
+c_raw_dynq_all_wc configs/mosi_raw.yaml base.ablate_eval=true model.frame_pos_std=1.0 model.text_mode=dynq model.audio_mode=dynq model.vision_mode=dynq base.time_warp=[0.7,1.4] base.warp_consistency=1.0
+c_mosei_dynq_wc   configs/mosei.yaml base.ablate_eval=true model.frame_pos_std=1.0 model.audio_mode=dynq model.vision_mode=dynq base.time_warp=[0.7,1.4] base.warp_consistency=1.0

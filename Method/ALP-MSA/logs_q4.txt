@@ -1,1 +1,24 @@
 24 jobs
+02:12:04 start q_raw_uniq 1111 gpu 0
+02:12:34 start q_raw_uniq 2222 gpu 1
+02:30:24 start q_raw_uniq 3333 gpu 1
+02:32:45 start q_raw_dynq 1111 gpu 1
+02:33:25 start q_raw_dynq 2222 gpu 0
+02:35:16 start q_raw_dynq 3333 gpu 0
+02:51:45 start q_raw_dynq_all 1111 gpu 1
+02:54:57 start q_raw_dynq_all 2222 gpu 0
+02:56:08 start q_raw_dynq_all 3333 gpu 0
+02:56:48 start mosei_query 3333 gpu 0
+02:58:29 start q_mosei_uniq 1111 gpu 2
+03:00:09 start q_mosei_uniq 2222 gpu 1
+03:06:51 start q_mosei_uniq 3333 gpu 2
+03:13:02 start q_mosei_dynq 1111 gpu 1
+03:16:33 start q_mosei_dynq 2222 gpu 0
+03:19:04 start q_mosei_dynq 3333 gpu 2
+04:02:46 start q_mmsa_uniq 1111 gpu 0
+04:10:37 start q_mmsa_uniq 2222 gpu 1
+04:21:07 start q_mmsa_uniq 3333 gpu 2
+04:29:48 start q_mmsa_dynq 1111 gpu 0
+04:33:48 start q_mmsa_dynq 2222 gpu 0
+04:34:18 start q_mmsa_dynq 3333 gpu 1
+ALL DONE

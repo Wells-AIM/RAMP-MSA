@@ -112,6 +112,33 @@ def resample_time(x, mask, factor):
     return out, new_mask
 
 
+def zero_modality(x, mask):
+    """Remove a modality: all-zero features, a single valid frame (keeps masking well-defined)."""
+    m = torch.zeros_like(mask)
+    m[:, 0] = True
+    return torch.zeros_like(x), m
+
+
+@torch.no_grad()
+def ablation_eval(model, loader, device):
+    """Test metrics with audio / vision / both removed at test time (reliance on A/V)."""
+    model.eval()
+    res = {}
+    for name in ('no_audio', 'no_vision', 'no_av'):
+        preds, trues = [], []
+        for batch in loader:
+            v, a, t = batch['vision'].to(device), batch['audio'].to(device), batch['text'].to(device)
+            vm, am = batch['vision_mask'].to(device), batch['audio_mask'].to(device)
+            if name in ('no_audio', 'no_av'):
+                a, am = zero_modality(a, am)
+            if name in ('no_vision', 'no_av'):
+                v, vm = zero_modality(v, vm)
+            preds.append(model(v, a, t, vm, am).cpu())
+            trues.append(batch['label'])
+        res[name] = mosi_metrics(torch.cat(preds).numpy(), torch.cat(trues).numpy())
+    return res
+
+
 @torch.no_grad()
 def robust_eval(model, loader, device, factors):
     model.eval()
@@ -203,6 +230,8 @@ def main():
             factors = getattr(cfg.base, 'robust_eval', None) or []
             if factors:
                 sel['test_resampled'] = robust_eval(model, loaders['test'], device, factors)
+            if getattr(cfg.base, 'ablate_eval', False):
+                sel['test_ablated'] = ablation_eval(model, loaders['test'], device)
             np.save(os.path.join(out_dir, 'test_pred_best.npy'), te_pred)
             if cfg.base.save_ckpt:
                 torch.save(model.state_dict(), os.path.join(out_dir, 'best.pt'))
