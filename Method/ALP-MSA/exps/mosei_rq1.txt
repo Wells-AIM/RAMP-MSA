@@ -1,0 +1,7 @@
+# RQ1 on MOSEI (main benchmark: 4x longer A/V sequences than MOSI)
+mosei_almt      configs/mosei.yaml
+mosei_query     configs/mosei.yaml model.audio_mode=query   model.vision_mode=query
+mosei_uniform   configs/mosei.yaml model.audio_mode=uniform model.vision_mode=uniform
+mosei_dynamic   configs/mosei.yaml model.audio_mode=dynamic model.vision_mode=dynamic
+mosei_dyn_all_tb_ev configs/mosei.yaml model.text_mode=dynamic model.audio_mode=dynamic model.vision_mode=dynamic model.time_bias=true model.event_weight=0.1
+mosei_frame     configs/mosei.yaml model.audio_mode=frame   model.vision_mode=frame

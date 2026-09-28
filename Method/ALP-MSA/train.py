@@ -36,20 +36,23 @@ def setup_seed(seed):
     torch.backends.cudnn.benchmark = False
 
 
-def run_epoch(model, loader, device, optimizer=None, grad_clip=0.0):
+def run_epoch(model, loader, device, optimizer=None, grad_clip=0.0, event_weight=0.0):
     train = optimizer is not None
     model.train(train)
     preds, trues, tot, n = [], [], 0.0, 0
+    ev_tot = 0.0
     for batch in loader:
         v, a, t = batch['vision'].to(device), batch['audio'].to(device), batch['text'].to(device)
         vm, am = batch['vision_mask'].to(device), batch['audio_mask'].to(device)
         y = batch['label'].to(device)
         with torch.set_grad_enabled(train):
-            out = model(v, a, t, vm, am)
+            out, aux = model(v, a, t, vm, am, return_aux=True)
             loss = torch.nn.functional.mse_loss(out, y)
+            ev = sum(aux[k]['event_loss'] for k in aux if 'event_loss' in aux[k])
+            ev_tot += float(ev) * y.size(0)
         if train:
             optimizer.zero_grad(set_to_none=True)
-            loss.backward()
+            (loss + event_weight * ev if event_weight > 0 else loss).backward()
             if grad_clip > 0:
                 torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
             optimizer.step()
@@ -59,7 +62,45 @@ def run_epoch(model, loader, device, optimizer=None, grad_clip=0.0):
         trues.append(y.cpu())
     res = mosi_metrics(torch.cat(preds).numpy(), torch.cat(trues).numpy())
     res['loss'] = round(tot / n, 5)
+    res['event_loss'] = round(ev_tot / n, 5)
     return res, torch.cat(preds).numpy().reshape(-1)
+
+
+def resample_time(x, mask, factor):
+    """Linearly resample the valid part of every A/V sequence to round(L*factor) frames
+    (simulates a different frame rate / speaking-speed); padding stays zero."""
+    B, L, D = x.shape
+    out = torch.zeros_like(x)
+    new_mask = torch.zeros_like(mask)
+    lens = mask.sum(1).clamp(min=1)
+    for i in range(B):
+        n = int(lens[i])
+        m = max(1, min(L, int(round(n * factor))))
+        if n > 1:
+            seq = x[i, :n].t().unsqueeze(0)                               # (1, D, n)
+            out[i, :m] = torch.nn.functional.interpolate(seq, size=m, mode='linear',
+                                                         align_corners=True).squeeze(0).t()
+        else:
+            out[i, :m] = x[i, :1].expand(m, D)
+        new_mask[i, :m] = True
+    return out, new_mask
+
+
+@torch.no_grad()
+def robust_eval(model, loader, device, factors):
+    model.eval()
+    res = {}
+    for f in factors:
+        preds, trues = [], []
+        for batch in loader:
+            v, a, t = batch['vision'].to(device), batch['audio'].to(device), batch['text'].to(device)
+            vm, am = batch['vision_mask'].to(device), batch['audio_mask'].to(device)
+            v, vm = resample_time(v, vm, f)
+            a, am = resample_time(a, am, f)
+            preds.append(model(v, a, t, vm, am).cpu())
+            trues.append(batch['label'])
+        res[str(f)] = mosi_metrics(torch.cat(preds).numpy(), torch.cat(trues).numpy())
+    return res
 
 
 def better(key, new, best):
@@ -120,7 +161,8 @@ def main():
     best, best_ep, history = None, -1, []
     t0 = time.time()
     for ep in range(1, E + 1):
-        tr, _ = run_epoch(model, loaders['train'], device, optimizer, cfg.base.grad_clip)
+        tr, _ = run_epoch(model, loaders['train'], device, optimizer, cfg.base.grad_clip,
+                          event_weight=cfg.model.event_weight)
         va, _ = run_epoch(model, loaders['valid'], device)
         te, te_pred = run_epoch(model, loaders['test'], device)
         sched.step()
@@ -128,6 +170,9 @@ def main():
         if better(key, va[key], best):
             best, best_ep = va[key], ep
             sel = {'epoch': ep, 'valid': va, 'test': te}
+            factors = getattr(cfg.base, 'robust_eval', None) or []
+            if factors:
+                sel['test_resampled'] = robust_eval(model, loaders['test'], device, factors)
             np.save(os.path.join(out_dir, 'test_pred_best.npy'), te_pred)
             if cfg.base.save_ckpt:
                 torch.save(model.state_dict(), os.path.join(out_dir, 'best.pt'))

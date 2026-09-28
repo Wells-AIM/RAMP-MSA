@@ -123,7 +123,24 @@ class AffectivePatcher(nn.Module):
         t_centre = torch.einsum('blk,bl->bk', w, t_rel) / w_sum
         strength = torch.einsum('blk,bl->bk', w, b) / w_sum
         desc = torch.stack([duration, t_centre, strength], -1)
-        return tokens, desc, w
+        return tokens, desc, w, a / denom.unsqueeze(1)
+
+    @staticmethod
+    def _event_loss(h, m, w, a_norm):
+        """Event coherence: fraction of frame variance NOT explained by the frame's patch.
+
+        Frames are reconstructed from the (salience-weighted) mean of the patch they are
+        assigned to.  h is detached, so the loss only shapes boundaries / salience: patches
+        should cover internally homogeneous affective events (learned change-point detection).
+        """
+        hd = h.detach()
+        q = torch.einsum('blk,bld->bkd', a_norm, hd)
+        h_hat = torch.einsum('blk,bkd->bld', w, q)
+        err = ((hd - h_hat) ** 2).mean(-1)
+        n = m.sum(1, keepdim=True).clamp(min=1.0)
+        mu = (hd * m.unsqueeze(-1)).sum(1, keepdim=True) / n.unsqueeze(-1)
+        var = ((hd - mu) ** 2).mean(-1)
+        return ((err * m).sum(1) / ((var * m).sum(1) + 1e-6)).mean()
 
     # ------------------------------------------------------------------ #
     def forward(self, x, mask):
@@ -140,8 +157,10 @@ class AffectivePatcher(nn.Module):
         m = mask.to(h.dtype)
         b = self._boundaries(x, h, m)
         sal = self.salience(h).squeeze(-1) if self.mode == 'dynamic' else None
-        tokens, desc, w = self._pool(h, m, b, sal)
+        tokens, desc, w, a_norm = self._pool(h, m, b, sal)
         tokens = tokens + self.patch_pos + self.desc_proj(desc)
         tokens = self.patch_enc(tokens)
         aux = {'boundary': b, 'assign': w, 'desc': desc}
+        if self.mode == 'dynamic':
+            aux['event_loss'] = self._event_loss(h, m, w, a_norm)
         return tokens, None, aux

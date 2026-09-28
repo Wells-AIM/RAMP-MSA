@@ -53,9 +53,9 @@ class PreNormAHL(nn.Module):
         self.norm4 = nn.LayerNorm(dim)
         self.fn = fn
 
-    def forward(self, h_t, h_a, h_v, h_hyper, mask_a=None, mask_v=None):
+    def forward(self, h_t, h_a, h_v, h_hyper, mask_a=None, mask_v=None, times=None):
         return self.fn(self.norm1(h_t), self.norm2(h_a), self.norm3(h_v), self.norm4(h_hyper),
-                       mask_a=mask_a, mask_v=mask_v)
+                       mask_a=mask_a, mask_v=mask_v, times=times)
 
 
 class FeedForward(nn.Module):
@@ -118,7 +118,19 @@ class HhyperLearningLayer(nn.Module):
             nn.Dropout(dropout)
         ) if project_out else nn.Identity()
 
-    def forward(self, h_t, h_a, h_v, h_hyper, mask_a=None, mask_v=None):
+        # event-synchronous fusion: per-head relative-time penalty gamma*|t_q - t_k|, only used
+        # when `times` is given.  gamma = GAMMA_SCALE * raw so it can move on the O(1-10) scale.
+        self.gamma_a = nn.Parameter(torch.zeros(heads))
+        self.gamma_v = nn.Parameter(torch.zeros(heads))
+
+    GAMMA_SCALE = 10.0
+
+    def _time_bias(self, gamma, t_q, t_k):
+        # gamma: (h,), t_q: (b, i), t_k: (b, j) in [0, 1] -> (b, h, i, j)
+        g = self.GAMMA_SCALE * gamma
+        return -g[None, :, None, None] * (t_q[:, None, :, None] - t_k[:, None, None, :]).abs()
+
+    def forward(self, h_t, h_a, h_v, h_hyper, mask_a=None, mask_v=None, times=None):
         h = self.heads
         q = self.to_q(h_t)
         k_ta, k_tv = self.to_k_ta(h_a), self.to_k_tv(h_v)
@@ -127,10 +139,15 @@ class HhyperLearningLayer(nn.Module):
                                         (q, k_ta, k_tv, v_ta, v_tv))
 
         dots_ta = einsum('b h i d, b h j d -> b h i j', q, k_ta) * self.scale
+        dots_tv = einsum('b h i d, b h j d -> b h i j', q, k_tv) * self.scale
+        if times is not None:
+            t_l, t_a, t_v = times
+            dots_ta = dots_ta + self._time_bias(self.gamma_a, t_l, t_a)
+            dots_tv = dots_tv + self._time_bias(self.gamma_v, t_l, t_v)
+
         attn_ta = self.attend(_apply_key_mask(dots_ta, mask_a))
         out_ta = rearrange(einsum('b h i j, b h j d -> b h i d', attn_ta, v_ta), 'b h n d -> b n (h d)')
 
-        dots_tv = einsum('b h i d, b h j d -> b h i j', q, k_tv) * self.scale
         attn_tv = self.attend(_apply_key_mask(dots_tv, mask_v))
         out_tv = rearrange(einsum('b h i j, b h j d -> b h i d', attn_tv, v_tv), 'b h n d -> b n (h d)')
 
@@ -145,9 +162,9 @@ class HhyperLearningEncoder(nn.Module):
             for _ in range(depth)
         ])
 
-    def forward(self, h_t_list, h_a, h_v, h_hyper, mask_a=None, mask_v=None):
+    def forward(self, h_t_list, h_a, h_v, h_hyper, mask_a=None, mask_v=None, times=None):
         for i, layer in enumerate(self.layers):
-            h_hyper = layer(h_t_list[i], h_a, h_v, h_hyper, mask_a=mask_a, mask_v=mask_v)
+            h_hyper = layer(h_t_list[i], h_a, h_v, h_hyper, mask_a=mask_a, mask_v=mask_v, times=times)
         return h_hyper
 
 

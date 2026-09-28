@@ -1,0 +1,11 @@
+# Stage B on MOSI: from compression to granularity alignment
+# all three modalities as event patches
+mosi_dyn_all       configs/mosi.yaml model.text_mode=dynamic model.audio_mode=dynamic model.vision_mode=dynamic
+# + event-synchronous fusion (relative-time bias text -> A/V)
+mosi_dyn_all_tb    configs/mosi.yaml model.text_mode=dynamic model.audio_mode=dynamic model.vision_mode=dynamic model.time_bias=true
+# + event-coherence loss
+mosi_dyn_all_ev    configs/mosi.yaml model.text_mode=dynamic model.audio_mode=dynamic model.vision_mode=dynamic model.event_weight=0.1
+# full: time bias + event loss
+mosi_dyn_all_tb_ev configs/mosi.yaml model.text_mode=dynamic model.audio_mode=dynamic model.vision_mode=dynamic model.time_bias=true model.event_weight=0.1
+# control: fixed patches everywhere + time bias (is it the timing or the dynamics?)
+mosi_uni_all_tb    configs/mosi.yaml model.text_mode=uniform model.audio_mode=uniform model.vision_mode=uniform model.time_bias=true

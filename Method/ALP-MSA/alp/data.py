@@ -52,20 +52,35 @@ class MMDataset(Dataset):
             self.vision[~np.isfinite(self.vision)] = 0
         self.audio_len = _lengths(split, 'audio_lengths', self.audio)
         self.vision_len = _lengths(split, 'vision_lengths', self.vision)
-        self.labels = split['regression_labels'].astype(np.float32)
+        self.labels = np.asarray(split['regression_labels'], dtype=np.float32)
         self.ids = list(split['id'])
+        self.norm = None
 
     def __len__(self):
         return len(self.labels)
 
+    def masked_stats(self, name, max_samples=4000):
+        """Per-dim mean/std over valid frames (subsample of utterances for speed)."""
+        x, lens = (self.audio, self.audio_len) if name == 'audio' else (self.vision, self.vision_len)
+        idx = np.random.RandomState(0).permutation(len(lens))[:max_samples]
+        frames = np.concatenate([np.asarray(x[i][:lens[i]], dtype=np.float64) for i in sorted(idx)])
+        return frames.mean(0).astype(np.float32), (frames.std(0) + 1e-6).astype(np.float32)
+
     def __getitem__(self, i):
         la, lv = self.audio.shape[1], self.vision.shape[1]
+        am = torch.arange(la) < int(self.audio_len[i])
+        vm = torch.arange(lv) < int(self.vision_len[i])
+        audio = np.array(self.audio[i], dtype=np.float32)
+        vision = np.array(self.vision[i], dtype=np.float32)
+        if self.norm is not None:
+            audio = (audio - self.norm['audio'][0]) / self.norm['audio'][1] * am.numpy()[:, None]
+            vision = (vision - self.norm['vision'][0]) / self.norm['vision'][1] * vm.numpy()[:, None]
         return {
             'text': torch.from_numpy(np.array(self.text[i], dtype=np.float32)),
-            'audio': torch.from_numpy(np.array(self.audio[i], dtype=np.float32)),
-            'vision': torch.from_numpy(np.array(self.vision[i], dtype=np.float32)),
-            'audio_mask': torch.arange(la) < int(self.audio_len[i]),
-            'vision_mask': torch.arange(lv) < int(self.vision_len[i]),
+            'audio': torch.from_numpy(audio.astype(np.float32)),
+            'vision': torch.from_numpy(vision.astype(np.float32)),
+            'audio_mask': am,
+            'vision_mask': vm,
             'label': torch.tensor([self.labels[i]]),
             'index': i,
         }
@@ -74,9 +89,13 @@ class MMDataset(Dataset):
 def build_loaders(cfg, seed):
     g = torch.Generator()
     g.manual_seed(seed)
-    loaders = {}
+    loaders, norm = {}, None
     for mode in ('train', 'valid', 'test'):
         ds = MMDataset(cfg, mode)
+        if getattr(cfg.dataset, 'input_norm', False):
+            if mode == 'train':
+                norm = {m: ds.masked_stats(m) for m in ('audio', 'vision')}
+            ds.norm = norm
         loaders[mode] = DataLoader(ds, batch_size=cfg.base.batch_size, shuffle=(mode == 'train'),
                                    num_workers=cfg.base.num_workers, generator=g if mode == 'train' else None,
                                    pin_memory=True)

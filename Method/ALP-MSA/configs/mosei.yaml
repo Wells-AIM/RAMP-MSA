@@ -12,9 +12,11 @@ base:
   key_eval: MAE          # validation metric used for model selection
   log_every: 2
   save_ckpt: false
+  robust_eval: [0.5, 0.75, 1.5, 2.0]   # test-time A/V temporal resampling factors (selected epoch only)
 
 dataset:
   datasetName: mosei
+  input_norm: false      # per-dim A/V standardisation with train statistics (valid frames)
   dataPath: /media/disk3/muxy/Dataset/MSA_unaligned/MOSEI/npy
 
 model:
@@ -43,6 +45,9 @@ model:
   patch_tau: 0.25
   boundary_min: 0.05
   use_raw_cue: true
+  event_weight: 0.0      # event-coherence loss weight (dynamic tokenizers only)
+  time_bias: false       # event-synchronous fusion: -gamma*|t_text - t_av| in text->A/V attention
+  time_bias_init: 2.0    # initial gamma (learned per head)
 
   l_enc_heads: 8
   l_enc_mlp_dim: 128

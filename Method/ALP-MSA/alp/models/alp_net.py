@@ -10,7 +10,9 @@ from torch import nn
 from einops import repeat
 from transformers import BertModel
 
-from .layers import Transformer, CrossTransformer, HhyperLearningEncoder
+from .layers import Transformer, CrossTransformer, HhyperLearningEncoder, HhyperLearningLayer
+
+HhyperLearningLayerScale = HhyperLearningLayer.GAMMA_SCALE
 from .patching import AffectivePatcher
 
 
@@ -55,6 +57,25 @@ class ALPNet(nn.Module):
                                              mlp_dim=m.fusion_mlp_dim)
         self.regression_layer = nn.Linear(D, 1)
 
+        # event-synchronous fusion (relative-time bias between text and A/V tokens)
+        self.time_bias = getattr(m, 'time_bias', False)
+        if self.time_bias:
+            timed = ('uniform', 'dynamic')
+            assert m.text_mode in timed, 'time_bias needs timed text tokens (text_mode uniform|dynamic)'
+            assert m.audio_mode in timed + ('frame',) and m.vision_mode in timed + ('frame',)
+            init = m.time_bias_init / HhyperLearningLayerScale
+            for layer in self.h_hyper_layer.layers:
+                layer.fn.gamma_a.data.fill_(init)
+                layer.fn.gamma_v.data.fill_(init)
+
+    @staticmethod
+    def _token_times(aux, mask):
+        """Relative temporal centre in [0, 1] of every token: patch centres or frame positions."""
+        if 'desc' in aux:
+            return aux['desc'][..., 1]
+        n = mask.sum(1, keepdim=True).clamp(min=1).float()
+        return torch.arange(mask.size(1), device=mask.device)[None].float() / n
+
     def forward(self, vision, audio, text, vision_mask, audio_mask, return_aux=False):
         b = vision.size(0)
         h_hyper = repeat(self.h_hyper, '1 n d -> b n d', b=b)
@@ -65,8 +86,13 @@ class ALPNet(nn.Module):
         h_a, mask_a, aux_a = self.tok_a(audio, audio_mask)
         h_v, mask_v, aux_v = self.tok_v(vision, vision_mask)
 
+        times = None
+        if self.time_bias:
+            times = (self._token_times(aux_l, text_mask), self._token_times(aux_a, audio_mask),
+                     self._token_times(aux_v, vision_mask))
+
         h_t_list = self.l_encoder(h_l)
-        h_hyper = self.h_hyper_layer(h_t_list, h_a, h_v, h_hyper, mask_a=mask_a, mask_v=mask_v)
+        h_hyper = self.h_hyper_layer(h_t_list, h_a, h_v, h_hyper, mask_a=mask_a, mask_v=mask_v, times=times)
         feat = self.fusion_layer(h_hyper, h_t_list[-1])[:, 0]
         out = self.regression_layer(feat)
         if return_aux:
