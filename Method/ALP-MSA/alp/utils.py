@@ -21,5 +21,11 @@ def apply_overrides(raw, overrides):
             node = node[k]
         if keys[-1] not in node:
             raise KeyError(f'unknown config key: {path}')
-        node[keys[-1]] = yaml.safe_load(val)
+        v = yaml.safe_load(val)
+        if isinstance(v, str):  # YAML 1.1 reads '2e-5' as a string
+            try:
+                v = float(v)
+            except ValueError:
+                pass
+        node[keys[-1]] = v
     return raw

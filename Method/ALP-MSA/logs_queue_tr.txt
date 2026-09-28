@@ -1,0 +1,5 @@
+60 jobs
+23:50:11 start mosi_raw_tr_almt 1111 gpu 0
+23:50:41 start mosi_raw_tr_almt 2222 gpu 1
+23:51:11 start mosi_raw_tr_almt 3333 gpu 2
+23:51:42 start mosi_raw_tr_query 1111 gpu 2

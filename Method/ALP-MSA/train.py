@@ -36,23 +36,48 @@ def setup_seed(seed):
     torch.backends.cudnn.benchmark = False
 
 
-def run_epoch(model, loader, device, optimizer=None, grad_clip=0.0, event_weight=0.0):
+def run_epoch(model, loader, device, optimizer=None, grad_clip=0.0, event_weight=0.0,
+              warp=None, warp_prob=0.5, cons_weight=0.0):
+    """warp=(lo, hi): train-time A/V temporal resampling by a per-sample factor ~ U(lo, hi).
+    cons_weight > 0: two views (original + warped) per batch, both supervised, plus a
+    granularity-consistency term ||f(x) - f(warp(x))||^2; otherwise each sample is warped
+    with probability warp_prob (plain augmentation)."""
     train = optimizer is not None
     model.train(train)
     preds, trues, tot, n = [], [], 0.0, 0
     ev_tot = 0.0
+    mse = torch.nn.functional.mse_loss
     for batch in loader:
         v, a, t = batch['vision'].to(device), batch['audio'].to(device), batch['text'].to(device)
         vm, am = batch['vision_mask'].to(device), batch['audio_mask'].to(device)
         y = batch['label'].to(device)
         with torch.set_grad_enabled(train):
-            out, aux = model(v, a, t, vm, am, return_aux=True)
-            loss = torch.nn.functional.mse_loss(out, y)
+            extra = 0.0
+            if train and warp is not None:
+                f = torch.empty(y.size(0)).uniform_(*warp).tolist()
+                if cons_weight <= 0:
+                    keep = torch.rand(y.size(0)) >= warp_prob
+                    f = [1.0 if k else fi for k, fi in zip(keep.tolist(), f)]
+                v2, vm2 = resample_time(v, vm, f)
+                a2, am2 = resample_time(a, am, f)
+                if cons_weight > 0:
+                    out, aux = model(v, a, t, vm, am, return_aux=True)
+                    out2 = model(v2, a2, t, vm2, am2)
+                    extra = 0.5 * mse(out2, y) + cons_weight * mse(out, out2)
+                    loss = mse(out, y)
+                    loss_main = 0.5 * loss
+                else:
+                    out, aux = model(v2, a2, t, vm2, am2, return_aux=True)
+                    loss = loss_main = mse(out, y)
+            else:
+                out, aux = model(v, a, t, vm, am, return_aux=True)
+                loss = loss_main = mse(out, y)
             ev = sum(aux[k]['event_loss'] for k in aux if 'event_loss' in aux[k])
             ev_tot += float(ev) * y.size(0)
         if train:
             optimizer.zero_grad(set_to_none=True)
-            (loss + event_weight * ev if event_weight > 0 else loss).backward()
+            total = loss_main + extra + (event_weight * ev if event_weight > 0 else 0.0)
+            total.backward()
             if grad_clip > 0:
                 torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
             optimizer.step()
@@ -72,10 +97,11 @@ def resample_time(x, mask, factor):
     B, L, D = x.shape
     out = torch.zeros_like(x)
     new_mask = torch.zeros_like(mask)
-    lens = mask.sum(1).clamp(min=1)
+    lens = mask.sum(1).clamp(min=1).tolist()
+    factors = factor if isinstance(factor, (list, tuple)) else [factor] * B
     for i in range(B):
         n = int(lens[i])
-        m = max(1, min(L, int(round(n * factor))))
+        m = max(1, min(L, int(round(n * factors[i]))))
         if n > 1:
             seq = x[i, :n].t().unsqueeze(0)                               # (1, D, n)
             out[i, :m] = torch.nn.functional.interpolate(seq, size=m, mode='linear',
@@ -161,8 +187,12 @@ def main():
     best, best_ep, history = None, -1, []
     t0 = time.time()
     for ep in range(1, E + 1):
+        warp = getattr(cfg.base, 'time_warp', None)
         tr, _ = run_epoch(model, loaders['train'], device, optimizer, cfg.base.grad_clip,
-                          event_weight=cfg.model.event_weight)
+                          event_weight=cfg.model.event_weight,
+                          warp=tuple(warp) if warp else None,
+                          warp_prob=getattr(cfg.base, 'warp_prob', 0.5),
+                          cons_weight=getattr(cfg.base, 'warp_consistency', 0.0))
         va, _ = run_epoch(model, loaders['valid'], device)
         te, te_pred = run_epoch(model, loaders['test'], device)
         sched.step()

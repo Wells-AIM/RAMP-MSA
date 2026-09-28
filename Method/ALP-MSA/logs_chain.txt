@@ -31,3 +31,5 @@ ALL DONE
 48 jobs
 23:48:35 start mosi_raw_almt 1111 gpu 0
 23:49:05 start mosi_raw_almt 2222 gpu 0
+23:49:35 start mosi_raw_almt 3333 gpu 1
+23:50:06 start mosi_raw_query 1111 gpu 1
