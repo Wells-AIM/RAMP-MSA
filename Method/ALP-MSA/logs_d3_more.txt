@@ -1,0 +1,12 @@
+10 jobs
+19:33:10 start t3_all_B 6666 gpu 0
+19:33:40 start t3_all_B 7777 gpu 0
+19:34:10 start t3_all_B 8888 gpu 1
+19:34:40 start t3_all_B 9999 gpu 1
+19:35:10 start t3_all_B 1234 gpu 2
+19:35:40 start t3_none 6666 gpu 2
+19:55:22 start t3_none 7777 gpu 0
+19:55:52 start t3_none 8888 gpu 2
+19:56:32 start t3_none 9999 gpu 0
+19:57:02 start t3_none 1234 gpu 1
+ALL DONE

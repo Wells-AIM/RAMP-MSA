@@ -25,8 +25,10 @@ until grep -q "EXIT=" $D/dl.log 2>/dev/null; do sleep 60; done
 grep "EXIT=0" $D/dl.log || { echo "download failed"; exit 1; }
 ls -l $D/Raw.zip
 
+echo "$(date +%T) extracting (MOSEI Raw.zip is Deflate64: Python zipfile cannot read it)"
+[ -f $D/extract/.done ] || { unzip -q -o $D/Raw.zip -d $D/extract && touch $D/extract/.done; }
 echo "$(date +%T) decoding"
-/media/disk3/muxy/envs/RoboTwin/bin/python tools/raw/decode_raw.py --pkl $LIGHT --zip $D/Raw.zip \
+/media/disk3/muxy/envs/RoboTwin/bin/python tools/raw/decode_raw.py --pkl $LIGHT --zip $D/extract \
     --out $D/decoded --workers 16 > $D/decode.log 2>&1
 tail -2 $D/decode.log
 

@@ -1,1 +1,6 @@
-17:37:06 light pkl
+19:32:34 light pkl
+19:32:34 waiting for Raw.zip
+EXIT=0
+-rw-rw-r-- 1 muxingyu muxingyu 27280713458 Sep 29 18:17 /media/disk3/muxy/Dataset/MSA_raw_feats/MOSEI/Raw.zip
+19:32:34 extracting (MOSEI Raw.zip is Deflate64: Python zipfile cannot read it)
+19:39:36 decoding

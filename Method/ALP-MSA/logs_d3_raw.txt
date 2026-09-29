@@ -1,0 +1,7 @@
+10 jobs
+20:23:16 start t3r_none 1111 gpu 0
+20:23:49 start t3r_none 2222 gpu 0
+20:24:20 start t3r_none 3333 gpu 1
+20:24:50 start t3r_none 4444 gpu 1
+20:25:20 start t3r_none 5555 gpu 2
+20:25:50 start t3r_all_B 1111 gpu 2

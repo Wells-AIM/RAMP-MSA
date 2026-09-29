@@ -3,3 +3,25 @@
 17:36:03 start t3_all_B 2222 gpu 0
 17:36:33 start t3_all_B 3333 gpu 1
 17:37:03 start t3_all_B 4444 gpu 1
+17:37:33 start t3_all_B 5555 gpu 2
+17:38:03 start t3_all_B_l1 1111 gpu 2
+17:53:04 start t3_all_B_l1 2222 gpu 0
+17:53:44 start t3_all_B_l1 3333 gpu 0
+17:54:25 start t3_all_B_l1 4444 gpu 1
+17:55:05 start t3_all_B_l1 5555 gpu 1
+17:55:35 start t3_all_B_r02 1111 gpu 2
+17:56:15 start t3_all_B_r02 2222 gpu 2
+18:10:26 start t3_all_B_r02 3333 gpu 0
+18:11:06 start t3_all_B_r02 4444 gpu 0
+18:12:06 start t3_all_B_r02 5555 gpu 1
+18:12:46 start d23_none 1111 gpu 1
+18:13:46 start d23_none 2222 gpu 2
+18:14:36 start d23_none 3333 gpu 2
+18:28:17 start d23_none 4444 gpu 0
+18:29:17 start d23_none 5555 gpu 0
+18:30:28 start d23_all_B 1111 gpu 1
+18:30:58 start d23_all_B 2222 gpu 1
+18:32:18 start d23_all_B 3333 gpu 2
+18:32:58 start d23_all_B 4444 gpu 2
+18:46:49 start d23_all_B 5555 gpu 0
+ALL DONE

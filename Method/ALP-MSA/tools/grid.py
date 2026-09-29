@@ -53,12 +53,23 @@ def main():
             slots[g] = [p for p in slots[g] if p.poll() is None]
             while jobs and len(slots[g]) < opt.per_gpu and free_mb(g) >= opt.min_free_mb:
                 name, cfg, sets, s = jobs.pop(0)
-                if already_running(name, s) or os.path.exists(f'runs/{name}/seed_{s}/result.json'):
+                out = os.path.abspath(f'runs/{name}/seed_{s}/result.json')
+                if os.path.exists(out):
                     continue
-                cmd = [sys.executable, 'train.py', '--config', cfg, '--seed', str(s), '--name', name,
-                       '--gpu', str(g)] + (['--set'] + sets if sets else [])
                 log = open(f'logs/{name}_seed{s}.log', 'w')
-                slots[g].append(subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT))
+                if cfg == 'CMD':
+                    # external command line: placeholders {seed} and {out} (result json); GPU via env
+                    if subprocess.run(['pgrep', '-f', out], capture_output=True).stdout.strip():
+                        continue
+                    cmd = ['bash', '-c', ' '.join(sets).format(seed=s, out=out)]
+                    env = dict(os.environ, CUDA_VISIBLE_DEVICES=str(g))
+                    slots[g].append(subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT, env=env))
+                else:
+                    if already_running(name, s):
+                        continue
+                    cmd = [sys.executable, 'train.py', '--config', cfg, '--seed', str(s), '--name', name,
+                           '--gpu', str(g)] + (['--set'] + sets if sets else [])
+                    slots[g].append(subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT))
                 print(time.strftime('%H:%M:%S'), 'start', name, s, 'gpu', g, flush=True)
                 time.sleep(30)  # let the new job allocate its memory before re-checking
         if jobs and not any(slots.values()) and all(free_mb(g) < opt.min_free_mb for g in slots):

@@ -27,7 +27,7 @@ _CASCADE = None
 
 def _init(zip_path):
     global _ZIP, _CASCADE
-    _ZIP = zipfile.ZipFile(zip_path)
+    _ZIP = zipfile.ZipFile(zip_path) if zip_path.endswith(".zip") else zip_path   # zip file or extracted dir
     _CASCADE = cv2.CascadeClassifier(os.path.join(cv2.data.haarcascades, 'haarcascade_frontalface_default.xml'))
 
 
@@ -86,7 +86,7 @@ def work(job):
     if os.path.exists(pa) and os.path.exists(pf):
         return uid, 'skip', 0, 0
     try:
-        buf = _ZIP.read(member)
+        buf = _ZIP.read(member) if not isinstance(_ZIP, str) else open(os.path.join(_ZIP, member), "rb").read()
         a = _audio(buf)
         f, n_det = _faces(buf, fps)
         np.save(pa, a)
@@ -99,7 +99,7 @@ def work(job):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--pkl', required=True)
-    ap.add_argument('--zip', required=True)
+    ap.add_argument('--zip', required=True, help='Raw.zip, or the directory it was extracted to (Deflate64 zips)')
     ap.add_argument('--out', required=True)
     ap.add_argument('--fps', type=float, default=10.0)
     ap.add_argument('--workers', type=int, default=12)
@@ -108,7 +108,7 @@ def main():
 
     data = pickle.load(open(opt.pkl, 'rb'))
     ids = [str(i) for s in ('train', 'valid', 'test') for i in data[s]['id']]
-    members = set(zipfile.ZipFile(opt.zip).namelist())
+    members = set(zipfile.ZipFile(opt.zip).namelist()) if opt.zip.endswith(".zip") else {os.path.relpath(os.path.join(r, f), opt.zip) for r, _, fs in os.walk(opt.zip) for f in fs}
     os.makedirs(os.path.join(opt.out, 'audio'), exist_ok=True)
     os.makedirs(os.path.join(opt.out, 'faces'), exist_ok=True)
 

@@ -1,0 +1,3 @@
+# Direction 3 on MOSI raw frame-level features (WavLM/CLIP), original ALMT backbone, 80 epochs
+t3r_none   configs/mosi_raw.yaml
+t3r_all_B  configs/mosi_raw.yaml distill.teacher_path=/media/disk3/muxy/Dataset/MSA_raw_feats/MOSI/teacher/teacher_B.npz distill.w_label=0.5 distill.w_reason=0.1 distill.w_fields=0.1

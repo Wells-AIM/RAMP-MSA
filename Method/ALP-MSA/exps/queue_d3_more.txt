@@ -1,0 +1,2 @@
+t3_all_B       configs/mosi.yaml distill.teacher_path=/media/disk3/muxy/Dataset/MSA_raw_feats/MOSI/teacher/teacher_B.npz distill.w_label=0.5 distill.w_reason=0.1 distill.w_fields=0.1
+t3_none        configs/mosi.yaml
