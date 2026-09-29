@@ -2,3 +2,16 @@
 20:49:07 start cf_none 5576 gpu 1
 20:49:37 start cf_none 42 gpu 2
 20:50:08 start cf_none 2026 gpu 2
+20:54:02 start cf_none 128 gpu 1
+20:56:14 start cf_none 7 gpu 1
+20:57:15 start cf_all_B 5576 gpu 0
+20:57:56 start cf_all_B 42 gpu 2
+21:11:41 start cf_all_B 2026 gpu 2
+21:12:21 start cf_all_B 128 gpu 1
+21:18:14 start cf_all_B 7 gpu 1
+21:18:54 start cf_label 5576 gpu 0
+21:19:55 start cf_label 42 gpu 2
+21:23:36 start cf_label 2026 gpu 0
+21:33:07 start cf_label 128 gpu 2
+21:34:27 start cf_label 7 gpu 1
+ALL DONE

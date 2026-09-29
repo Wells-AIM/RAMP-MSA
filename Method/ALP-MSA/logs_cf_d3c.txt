@@ -1,0 +1,5 @@
+20 jobs
+23:49:44 start cf_none 1111 gpu 0
+23:50:14 start cf_none 2222 gpu 0
+23:50:44 start cf_none 3333 gpu 1
+23:51:15 start cf_none 4444 gpu 1

@@ -1,0 +1,4 @@
+2 jobs
+21:53:58 start t3r_all_B 3333 gpu 0
+21:54:28 start t3r_all_B 5555 gpu 0
+ALL DONE

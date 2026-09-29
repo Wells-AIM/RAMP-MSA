@@ -37,7 +37,8 @@ def main():
     ap.add_argument('--pkl', required=True)
     ap.add_argument('--decoded', required=True)
     ap.add_argument('--out', required=True)
-    ap.add_argument('--gpu', type=int, default=0)
+    ap.add_argument('--gpu', default='0', help='GPU id, or comma list for tensor parallelism')
+    ap.add_argument('--tp', type=int, default=1, help='tensor-parallel size (e.g. 2 for 72B-AWQ on 2x4090)')
     ap.add_argument('--shard', type=int, default=0)
     ap.add_argument('--nshards', type=int, default=1)
     ap.add_argument('--fps', type=float, default=2.0)
@@ -52,9 +53,14 @@ def main():
 
     from vllm import LLM, SamplingParams
     use_video, use_audio = opt.task in ('whole', 'facial'), opt.task in ('whole', 'prosody')
-    llm = LLM(model=opt.model, max_model_len=8192, max_num_seqs=32, gpu_memory_utilization=opt.gpu_util, seed=0,
-              max_num_batched_tokens=16384, mm_processor_cache_gb=0,   # cache hits drop use_audio_in_video (vLLM 0.10.2)
-              limit_mm_per_prompt={'audio': 1, 'video': 1, 'image': 1})   # a 0 here disables the encoder cache
+    arch = json.load(open(os.path.join(opt.model, 'config.json'))).get('architectures', [''])[0]
+    omni = 'Omni' in arch
+    if not omni and (use_video or use_audio):
+        raise SystemExit(f'{arch} is text-only; task {opt.task} needs audio/video')
+    kw = dict(max_num_batched_tokens=16384, mm_processor_cache_gb=0,   # cache hits drop use_audio_in_video (0.10.2)
+              limit_mm_per_prompt={'audio': 1, 'video': 1, 'image': 1}) if omni else {}   # a 0 disables the encoder cache
+    llm = LLM(model=opt.model, max_model_len=8192 if omni else 4096, max_num_seqs=32 if omni else 64,
+              gpu_memory_utilization=opt.gpu_util, seed=0, tensor_parallel_size=opt.tp, **kw)
     sp = SamplingParams(temperature=0.0, max_tokens=opt.max_new_tokens)
 
     data = pickle.load(open(opt.pkl, 'rb'))
