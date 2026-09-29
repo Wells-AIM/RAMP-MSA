@@ -68,7 +68,8 @@ class MMDataset(Dataset):
             safe = np.where(has, idx, 0)
             t = {'score': np.nan_to_num(z['score'][safe]).astype(np.float32),
                  'has_score': has & np.isfinite(z['score'][safe]),
-                 'z_all': z['z_all'][safe].astype(np.float32), 'has_all': has}
+                 'z_all': z['z_all'][safe].astype(np.float32),
+                 'has_all': has & (z['valid_all'][safe] if 'valid_all' in z.files else True)}
             for f in ('semantic', 'prosody', 'facial'):
                 t[f'z_{f}'] = z[f'z_{f}'][safe].astype(np.float32)
                 t[f'has_{f}'] = has & z[f'valid_{f}'][safe]

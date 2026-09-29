@@ -1,0 +1,12 @@
+# Direction 3 (RQ2): can a teacher's emotion-evidence reasoning be distilled into the tri-modal student?
+# MOSI-MMSA, original ALMT backbone, teacher signals on the TRAIN split only, no teacher at test time.
+# Teacher A: whole chain = EmotionThinker (video+audio+text); evidence fields = Omni text-only (semantic),
+#            EmotionThinker audio-only (prosody), Omni video-only (facial); label score = Omni text-only.
+# Teacher B: same, but whole chain from base Qwen2.5-Omni-7B (teacher-quality comparison).
+t3_none        configs/mosi.yaml
+t3_label       configs/mosi.yaml distill.teacher_path=/media/disk3/muxy/Dataset/MSA_raw_feats/MOSI/teacher/teacher_A.npz distill.w_label=0.5
+t3_reason      configs/mosi.yaml distill.teacher_path=/media/disk3/muxy/Dataset/MSA_raw_feats/MOSI/teacher/teacher_A.npz distill.w_reason=0.1
+t3_reason_B    configs/mosi.yaml distill.teacher_path=/media/disk3/muxy/Dataset/MSA_raw_feats/MOSI/teacher/teacher_B.npz distill.w_reason=0.1
+t3_fields      configs/mosi.yaml distill.teacher_path=/media/disk3/muxy/Dataset/MSA_raw_feats/MOSI/teacher/teacher_A.npz distill.w_fields=0.1
+t3_reason_fields configs/mosi.yaml distill.teacher_path=/media/disk3/muxy/Dataset/MSA_raw_feats/MOSI/teacher/teacher_A.npz distill.w_reason=0.1 distill.w_fields=0.1
+t3_all         configs/mosi.yaml distill.teacher_path=/media/disk3/muxy/Dataset/MSA_raw_feats/MOSI/teacher/teacher_A.npz distill.w_label=0.5 distill.w_reason=0.1 distill.w_fields=0.1

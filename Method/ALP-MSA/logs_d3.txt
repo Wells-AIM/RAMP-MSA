@@ -1,0 +1,35 @@
+    2199 /media/disk3/muxy/Dataset/MSA_raw_feats/MOSI/teacher/facial_omni.jsonl
+    2199 /media/disk3/muxy/Dataset/MSA_raw_feats/MOSI/teacher/prosody_et.jsonl
+    2199 /media/disk3/muxy/Dataset/MSA_raw_feats/MOSI/teacher/semantic_omni.jsonl
+    2199 /media/disk3/muxy/Dataset/MSA_raw_feats/MOSI/teacher/whole_et.jsonl
+    2199 /media/disk3/muxy/Dataset/MSA_raw_feats/MOSI/teacher/whole_omni.jsonl
+   10995 total
+semantic_omni.jsonl      n=2199 parsed=1.00
+    train n=1231 acc2(non0)=0.849 corr=0.798 MAE=1.109 score std=2.27
+    valid n= 216 acc2(non0)=0.847 corr=0.824 MAE=1.036 score std=2.28
+    test  n= 656 acc2(non0)=0.857 corr=0.795 MAE=1.075 score std=2.31
+prosody_et.jsonl         n=2199 parsed=1.00
+    train n=1230 acc2(non0)=0.565 corr=0.182 MAE=1.918 score std=1.31
+    valid n= 216 acc2(non0)=0.556 corr=0.030 MAE=2.158 score std=1.10
+    test  n= 656 acc2(non0)=0.511 corr=0.097 MAE=2.386 score std=1.26
+facial_omni.jsonl        n=2199 parsed=1.00
+    train n=1230 acc2(non0)=0.481 corr=-0.081 MAE=1.637 score std=0.97
+    valid n= 215 acc2(non0)=0.558 corr=-0.082 MAE=1.779 score std=1.00
+    test  n= 656 acc2(non0)=0.428 corr=-0.048 MAE=1.955 score std=1.02
+whole_et.jsonl           n=2199 parsed=1.00
+    train n=1231 acc2(non0)=0.730 corr=0.598 MAE=1.427 score std=1.96
+    valid n= 216 acc2(non0)=0.676 corr=0.429 MAE=1.816 score std=1.92
+    test  n= 656 acc2(non0)=0.662 corr=0.473 MAE=1.735 score std=2.12
+whole_omni.jsonl         n=2199 parsed=1.00
+    train n=1231 acc2(non0)=0.854 corr=0.787 MAE=0.857 score std=1.84
+    valid n= 216 acc2(non0)=0.856 corr=0.821 MAE=0.864 score std=1.97
+    test  n= 656 acc2(non0)=0.852 corr=0.777 MAE=0.888 score std=1.87
+saved /media/disk3/muxy/Dataset/MSA_raw_feats/MOSI/teacher/teacher_A.npz {'ids': (2199,), 'split': (2199,), 'score': (2199,), 'score_semantic': (2199,), 'score_prosody': (2199,), 'score_facial': (2199,), 'valid_all': (2199,), 'z_all': (2199, 768), 'z_semantic': (2199, 768), 'valid_semantic': (2199,), 'z_prosody': (2199, 768), 'valid_prosody': (2199,), 'z_facial': (2199, 768), 'valid_facial': (2199,), 'z_consistency': (2199, 768), 'valid_consistency': (2199,), 'z_conclusion': (2199, 768), 'valid_conclusion': (2199,)} {'semantic': 1.0, 'prosody': 1.0, 'facial': 1.0, 'consistency': 0.0, 'conclusion': 0.0} score parsed 1.0
+saved /media/disk3/muxy/Dataset/MSA_raw_feats/MOSI/teacher/teacher_B.npz {'ids': (2199,), 'split': (2199,), 'score': (2199,), 'score_semantic': (2199,), 'score_prosody': (2199,), 'score_facial': (2199,), 'valid_all': (2199,), 'z_all': (2199, 768), 'z_semantic': (2199, 768), 'valid_semantic': (2199,), 'z_prosody': (2199, 768), 'valid_prosody': (2199,), 'z_facial': (2199, 768), 'valid_facial': (2199,), 'z_consistency': (2199, 768), 'valid_consistency': (2199,), 'z_conclusion': (2199, 768), 'valid_conclusion': (2199,)} {'semantic': 1.0, 'prosody': 1.0, 'facial': 1.0, 'consistency': 1.0, 'conclusion': 1.0} score parsed 1.0
+35 jobs
+12:44:07 start t3_none 1111 gpu 0
+12:44:37 start t3_label 1111 gpu 0
+12:45:07 start t3_label 2222 gpu 1
+12:45:37 start t3_label 3333 gpu 2
+12:46:08 start t3_label 4444 gpu 2
+12:47:18 start t3_label 5555 gpu 1

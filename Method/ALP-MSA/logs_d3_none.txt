@@ -1,0 +1,7 @@
+5 jobs
+12:29:45 start t3_none 1111 gpu 0
+12:30:15 start t3_none 2222 gpu 0
+12:30:45 start t3_none 3333 gpu 1
+12:31:15 start t3_none 4444 gpu 1
+12:34:26 start t3_none 5555 gpu 0
+ALL DONE

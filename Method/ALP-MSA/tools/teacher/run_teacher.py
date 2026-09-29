@@ -42,6 +42,21 @@ Inside <answer>, give only one sentiment intensity score from -3.0 (highly negat
 
 FIELDS = ('semantic', 'prosody', 'facial', 'consistency', 'conclusion')
 
+# Modality-specific evidence prompts (one teacher pass per task). The whole-chain task sees all
+# three modalities; the evidence tasks see ONLY their own modality so each field is modality-pure.
+TASK_PROMPTS = {
+    'whole': PROMPT,
+    'prosody': ("Listen only to HOW the speaker talks, not to what the words mean. In <think>, describe the "
+                "pitch, energy, speaking rate, pauses, stress and voice quality, and what emotion and sentiment "
+                "they convey. In <answer>, give one sentiment intensity score from -3.0 to 3.0."),
+    'facial': ("These are face frames of a person speaking (no audio). In <think>, describe the facial "
+               "expressions, eye and mouth movements, head movements and their changes over time, and what "
+               "emotion and sentiment they convey. In <answer>, give one sentiment intensity score from -3.0 to 3.0."),
+    'semantic': ('Here is only the transcript of an utterance: "{text}". In <think>, explain what sentiment the '
+                 'words themselves convey (word choice, negation, intensifiers, context). In <answer>, give one '
+                 'sentiment intensity score from -3.0 to 3.0.'),
+}
+
 
 def parse(raw):
     think = re.search(r'<think>(.*?)(</think>|$)', raw, re.S)
@@ -71,6 +86,8 @@ def main():
     ap.add_argument('--max_new_tokens', type=int, default=384)
     ap.add_argument('--limit', type=int, default=0)
     ap.add_argument('--splits', default='train,valid,test')
+    ap.add_argument('--task', default='whole', choices=list(TASK_PROMPTS))
+    ap.add_argument('--batch', type=int, default=4)
     opt = ap.parse_args()
 
     device = f'cuda:{opt.gpu}'
@@ -93,34 +110,54 @@ def main():
     print(f'{len(items)} items in shard, {len(done)} already done', flush=True)
 
     step = max(1, int(round(10 / opt.fps)))
+    processor.tokenizer.padding_side = 'left'            # batched generation
+    use_video, use_audio = opt.task in ('whole', 'facial'), opt.task in ('whole', 'prosody')
+    todo = [it for it in items if it[1] not in done]
+    if use_video:   # batch clips of similar length together (minimal frame padding)
+        def n_frames(uid):
+            f = np.load(os.path.join(opt.decoded, 'faces', uid.replace('$_$', '__') + '.npy'), mmap_mode='r')
+            return min(opt.max_frames, (len(f) + step - 1) // step)
+        todo.sort(key=lambda it: n_frames(it[1]))
     t0, n = time.time(), 0
     with open(opt.out, 'a') as fo:
-        for split, uid, text in items:
-            if uid in done:
-                continue
-            name = uid.replace('$_$', '__')
-            wav = np.load(os.path.join(opt.decoded, 'audio', name + '.npy'))
-            faces = np.load(os.path.join(opt.decoded, 'faces', name + '.npy'))[::step][:opt.max_frames]
-            if len(faces) % 2:                      # Qwen2.5-VL temporal patch = 2 frames
-                faces = np.concatenate([faces, faces[-1:]])
-            conv = [{'role': 'system', 'content': [{'type': 'text', 'text': SYSTEM}]},
-                    {'role': 'user', 'content': [{'type': 'video'}, {'type': 'audio'},
-                                                 {'type': 'text', 'text': PROMPT.format(text=text.strip())}]}]
-            prompt = processor.apply_chat_template(conv, add_generation_prompt=True, tokenize=False)
-            inputs = processor(text=prompt, audio=[wav], videos=[faces], return_tensors='pt', padding=True,
-                               use_audio_in_video=False, videos_kwargs={'fps': [opt.fps]})
+        for s in range(0, len(todo), opt.batch):
+            chunk = todo[s:s + opt.batch]
+            prompts, wavs, vids = [], [], []
+            for split, uid, text in chunk:
+                name = uid.replace('$_$', '__')
+                content = []
+                if use_video:
+                    faces = np.load(os.path.join(opt.decoded, 'faces', name + '.npy'))[::step][:opt.max_frames]
+                    if len(faces) % 2:                  # Qwen2.5-VL temporal patch = 2 frames
+                        faces = np.concatenate([faces, faces[-1:]])
+                    vids.append(faces)
+                    content.append({'type': 'video'})
+                if use_audio:
+                    wavs.append(np.load(os.path.join(opt.decoded, 'audio', name + '.npy')))
+                    content.append({'type': 'audio'})
+                content.append({'type': 'text', 'text': TASK_PROMPTS[opt.task].format(text=text.strip())})
+                conv = [{'role': 'system', 'content': [{'type': 'text', 'text': SYSTEM}]},
+                        {'role': 'user', 'content': content}]
+                p = processor.apply_chat_template(conv, add_generation_prompt=True, tokenize=False)
+                prompts.append(p[0] if isinstance(p, list) else p)   # 4.52 returns a list for one conv
+            if vids:                                    # equal frame counts within a batch (repeat last frame)
+                T = max(len(f) for f in vids)
+                vids = [np.concatenate([f, np.repeat(f[-1:], T - len(f), 0)]) if len(f) < T else f for f in vids]
+            inputs = processor(text=prompts, audio=wavs or None, videos=vids or None, return_tensors='pt',
+                               padding=True, use_audio_in_video=False, fps=opt.fps)
             inputs = inputs.to(device).to(model.dtype)
             with torch.no_grad():
                 out = model.generate(**inputs, use_audio_in_video=False, return_audio=False,
                                      max_new_tokens=opt.max_new_tokens, do_sample=False)
-            raw = processor.batch_decode(out[:, inputs['input_ids'].shape[1]:], skip_special_tokens=True)[0]
-            fields, score = parse(raw)
-            fo.write(json.dumps({'id': uid, 'split': split, 'raw': raw, 'fields': fields, 'score': score},
-                                ensure_ascii=False) + '\n')
+            raws = processor.batch_decode(out[:, inputs['input_ids'].shape[1]:], skip_special_tokens=True)
+            for (split, uid, _), raw in zip(chunk, raws):
+                fields, score = parse(raw)
+                fo.write(json.dumps({'id': uid, 'split': split, 'task': opt.task, 'raw': raw, 'fields': fields,
+                                     'score': score}, ensure_ascii=False) + '\n')
             fo.flush()
-            n += 1
-            if n % 20 == 0:
-                print(f'{n} done, {(time.time()-t0)/n:.1f}s/item', flush=True)
+            n += len(chunk)
+            if (s // opt.batch) % 10 == 0:
+                print(f'{n}/{len(todo)} done, {(time.time()-t0)/n:.2f}s/item', flush=True)
     print('DONE', n, flush=True)
 
 
