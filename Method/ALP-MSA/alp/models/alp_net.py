@@ -67,6 +67,14 @@ class ALPNet(nn.Module):
             self.norm_feat, self.norm_text = nn.LayerNorm(D), nn.LayerNorm(D)
             self.regression_layer = nn.Linear(2 * D, 1)
 
+        # Direction 3: training-only reasoning-distillation heads
+        d = getattr(cfg, 'distill', None)
+        self.distill = None
+        if d is not None and (d.w_label > 0 or d.w_reason > 0 or d.w_fields > 0):
+            from ..distill import DistillHeads
+            feat_dim = 2 * D if getattr(m, 'text_residual', False) else D
+            self.distill = DistillHeads(feat_dim, D, d.teacher_dim, d.proj_dim)
+
         if getattr(m, 'av_gate', False):
             for layer in self.h_hyper_layer.layers:
                 layer.fn.use_gate = True
@@ -118,5 +126,12 @@ class ALPNet(nn.Module):
             feat = torch.cat([self.norm_feat(feat), t_feat], -1)
         out = self.regression_layer(feat)
         if return_aux:
-            return out, {'l': aux_l, 'a': aux_a, 'v': aux_v}
+            def pooled(h, m):  # mean over tokens (frames when a frame-level tokenizer returns a mask)
+                if m is None:
+                    return h.mean(1)
+                w = m.unsqueeze(-1).to(h.dtype)
+                return (h * w).sum(1) / w.sum(1).clamp(min=1.0)
+            aux = {'l': aux_l, 'a': aux_a, 'v': aux_v, 'fused': feat,
+                   'pooled': {'l': h_t_list[-1].mean(1), 'a': pooled(h_a, mask_a), 'v': pooled(h_v, mask_v)}}
+            return out, aux
         return out

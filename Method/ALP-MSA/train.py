@@ -37,7 +37,7 @@ def setup_seed(seed):
 
 
 def run_epoch(model, loader, device, optimizer=None, grad_clip=0.0, event_weight=0.0,
-              warp=None, warp_prob=0.5, cons_weight=0.0):
+              warp=None, warp_prob=0.5, cons_weight=0.0, distill_cfg=None):
     """warp=(lo, hi): train-time A/V temporal resampling by a per-sample factor ~ U(lo, hi).
     cons_weight > 0: two views (original + warped) per batch, both supervised, plus a
     granularity-consistency term ||f(x) - f(warp(x))||^2; otherwise each sample is warped
@@ -46,6 +46,7 @@ def run_epoch(model, loader, device, optimizer=None, grad_clip=0.0, event_weight
     model.train(train)
     preds, trues, tot, n = [], [], 0.0, 0
     ev_tot = 0.0
+    dist_tot = {}
     mse = torch.nn.functional.mse_loss
     for batch in loader:
         v, a, t = batch['vision'].to(device), batch['audio'].to(device), batch['text'].to(device)
@@ -72,11 +73,17 @@ def run_epoch(model, loader, device, optimizer=None, grad_clip=0.0, event_weight
             else:
                 out, aux = model(v, a, t, vm, am, return_aux=True)
                 loss = loss_main = mse(out, y)
-            ev = sum(aux[k]['event_loss'] for k in aux if 'event_loss' in aux[k])
+            ev = sum(aux[k]['event_loss'] for k in ('l', 'a', 'v') if 'event_loss' in aux[k])
             ev_tot += float(ev) * y.size(0)
+            dl = 0.0
+            if train and distill_cfg is not None and model.distill is not None and "teacher" in batch:
+                tch = {key: val.to(device) for key, val in batch["teacher"].items()}
+                dl, parts = model.distill(out, aux, tch, distill_cfg)
+                for key, val in parts.items():
+                    dist_tot[key] = dist_tot.get(key, 0.0) + val * y.size(0)
         if train:
             optimizer.zero_grad(set_to_none=True)
-            total = loss_main + extra + (event_weight * ev if event_weight > 0 else 0.0)
+            total = loss_main + extra + dl + (event_weight * ev if event_weight > 0 else 0.0)
             total.backward()
             if grad_clip > 0:
                 torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
@@ -88,6 +95,8 @@ def run_epoch(model, loader, device, optimizer=None, grad_clip=0.0, event_weight
     res = mosi_metrics(torch.cat(preds).numpy(), torch.cat(trues).numpy())
     res['loss'] = round(tot / n, 5)
     res['event_loss'] = round(ev_tot / n, 5)
+    for k, v in dist_tot.items():
+        res[f'distill_{k}'] = round(v / n, 5)
     return res, torch.cat(preds).numpy().reshape(-1)
 
 
@@ -219,7 +228,8 @@ def main():
                           event_weight=cfg.model.event_weight,
                           warp=tuple(warp) if warp else None,
                           warp_prob=getattr(cfg.base, 'warp_prob', 0.5),
-                          cons_weight=getattr(cfg.base, 'warp_consistency', 0.0))
+                          cons_weight=getattr(cfg.base, 'warp_consistency', 0.0),
+                          distill_cfg=getattr(cfg, 'distill', None))
         va, _ = run_epoch(model, loaders['valid'], device)
         te, te_pred = run_epoch(model, loaders['test'], device)
         sched.step()

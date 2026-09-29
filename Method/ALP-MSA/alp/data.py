@@ -57,6 +57,25 @@ class MMDataset(Dataset):
         self.norm = None
         self.drop = set(getattr(cfg.dataset, 'drop_modalities', None) or [])
 
+        # Direction 3: teacher reasoning targets, attached to the TRAIN split only
+        self.teacher = None
+        d = getattr(cfg, 'distill', None)
+        if mode == 'train' and d is not None and d.teacher_path and (d.w_label > 0 or d.w_reason > 0 or d.w_fields > 0):
+            z = np.load(d.teacher_path)
+            row = {str(i): k for k, i in enumerate(z['ids'])}
+            idx = np.array([row.get(str(i), -1) for i in self.ids])
+            has = idx >= 0
+            safe = np.where(has, idx, 0)
+            t = {'score': np.nan_to_num(z['score'][safe]).astype(np.float32),
+                 'has_score': has & np.isfinite(z['score'][safe]),
+                 'z_all': z['z_all'][safe].astype(np.float32), 'has_all': has}
+            for f in ('semantic', 'prosody', 'facial'):
+                t[f'z_{f}'] = z[f'z_{f}'][safe].astype(np.float32)
+                t[f'has_{f}'] = has & z[f'valid_{f}'][safe]
+            self.teacher = t
+            print(f'teacher targets: {has.mean():.3f} of train utterances covered, score parsed '
+                  f'{t["has_score"].mean():.3f}', flush=True)
+
     def __len__(self):
         return len(self.labels)
 
@@ -82,6 +101,12 @@ class MMDataset(Dataset):
         if self.norm is not None:
             audio = (audio - self.norm['audio'][0]) / self.norm['audio'][1] * am.numpy()[:, None]
             vision = (vision - self.norm['vision'][0]) / self.norm['vision'][1] * vm.numpy()[:, None]
+        item = self._item(i, audio, vision, am, vm)
+        if self.teacher is not None:
+            item['teacher'] = {k: torch.as_tensor(v[i]) for k, v in self.teacher.items()}
+        return item
+
+    def _item(self, i, audio, vision, am, vm):
         return {
             'text': torch.from_numpy(np.array(self.text[i], dtype=np.float32)),
             'audio': torch.from_numpy(audio.astype(np.float32)),

@@ -66,3 +66,13 @@ model:
   fusion_heads: 8
   fusion_mlp_dim: 128
   fusion_layer_depth: 2
+
+# Direction 3: training-only distillation of teacher emotion-evidence reasoning (tools/teacher)
+distill:
+  teacher_path: null     # npz from tools/teacher/embed_reasoning.py
+  teacher_dim: 768
+  proj_dim: 256
+  tau: 0.1
+  w_label: 0.0           # MSE to teacher sentiment score (label distillation)
+  w_reason: 0.0          # InfoNCE fused feature <-> whole reasoning chain
+  w_fields: 0.0          # InfoNCE text/audio/vision tokens <-> Semantic/Prosody/Facial evidence
