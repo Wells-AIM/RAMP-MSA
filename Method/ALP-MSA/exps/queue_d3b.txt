@@ -1,0 +1,8 @@
+# Direction 3, round 2 (MOSI-MMSA, 5 seeds). Reference: t3_none / t3_all (teacher A).
+# (1) all three signals with the stronger teacher chain B (base Omni) + small weight sweep
+t3_all_B       configs/mosi.yaml distill.teacher_path=/media/disk3/muxy/Dataset/MSA_raw_feats/MOSI/teacher/teacher_B.npz distill.w_label=0.5 distill.w_reason=0.1 distill.w_fields=0.1
+t3_all_B_l1    configs/mosi.yaml distill.teacher_path=/media/disk3/muxy/Dataset/MSA_raw_feats/MOSI/teacher/teacher_B.npz distill.w_label=1.0 distill.w_reason=0.1 distill.w_fields=0.1
+t3_all_B_r02   configs/mosi.yaml distill.teacher_path=/media/disk3/muxy/Dataset/MSA_raw_feats/MOSI/teacher/teacher_B.npz distill.w_label=0.5 distill.w_reason=0.2 distill.w_fields=0.2
+# (2) Direction 2 + 3: event patches on T/A/V (best MMSA backbone) with / without distillation
+d23_none       configs/mosi.yaml model.text_mode=dynamic model.audio_mode=dynamic model.vision_mode=dynamic
+d23_all_B      configs/mosi.yaml model.text_mode=dynamic model.audio_mode=dynamic model.vision_mode=dynamic distill.teacher_path=/media/disk3/muxy/Dataset/MSA_raw_feats/MOSI/teacher/teacher_B.npz distill.w_label=0.5 distill.w_reason=0.1 distill.w_fields=0.1

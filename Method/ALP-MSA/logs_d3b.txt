@@ -1,0 +1,5 @@
+25 jobs
+17:35:33 start t3_all_B 1111 gpu 0
+17:36:03 start t3_all_B 2222 gpu 0
+17:36:33 start t3_all_B 3333 gpu 1
+17:37:03 start t3_all_B 4444 gpu 1
