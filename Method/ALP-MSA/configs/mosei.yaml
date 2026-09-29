@@ -77,3 +77,7 @@ distill:
   w_label: 0.0           # MSE to teacher sentiment score (label distillation)
   w_reason: 0.0          # InfoNCE fused feature <-> whole reasoning chain
   w_fields: 0.0          # InfoNCE text/audio/vision tokens <-> Semantic/Prosody/Facial evidence
+  verify_sigma: 0.0      # Direction 1: >0 weights reasoning terms by exp(-(teacher score-label)^2/2s^2)
+  w_rel: 0.0             # Direction 1: relational reasoning distillation (in-batch similarity KL)
+  w_hid: 0.0             # InfoNCE fused feature <-> fine-tuned (cross-fitted) Omni teacher hidden state (z_hid)
+  rel_tau: 0.1

@@ -60,7 +60,7 @@ class MMDataset(Dataset):
         # Direction 3: teacher reasoning targets, attached to the TRAIN split only
         self.teacher = None
         d = getattr(cfg, 'distill', None)
-        if mode == 'train' and d is not None and d.teacher_path and (d.w_label > 0 or d.w_reason > 0 or d.w_fields > 0):
+        if mode == 'train' and d is not None and d.teacher_path and (d.w_label > 0 or d.w_reason > 0 or d.w_fields > 0 or getattr(d, "w_rel", 0) > 0 or getattr(d, "w_hid", 0) > 0):
             z = np.load(d.teacher_path)
             row = {str(i): k for k, i in enumerate(z['ids'])}
             idx = np.array([row.get(str(i), -1) for i in self.ids])
@@ -73,6 +73,9 @@ class MMDataset(Dataset):
             for f in ('semantic', 'prosody', 'facial'):
                 t[f'z_{f}'] = z[f'z_{f}'][safe].astype(np.float32)
                 t[f'has_{f}'] = has & z[f'valid_{f}'][safe]
+            if 'z_hid' in z.files:   # fine-tuned (cross-fitted) Omni teacher hidden state
+                t['z_hid'] = z['z_hid'][safe].astype(np.float16)
+                t['has_hid'] = has & z['valid_hid'][safe]
             self.teacher = t
             print(f'teacher targets: {has.mean():.3f} of train utterances covered, score parsed '
                   f'{t["has_score"].mean():.3f}', flush=True)

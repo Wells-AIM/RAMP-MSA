@@ -78,6 +78,7 @@ def run_epoch(model, loader, device, optimizer=None, grad_clip=0.0, event_weight
             dl = 0.0
             if train and distill_cfg is not None and model.distill is not None and "teacher" in batch:
                 tch = {key: val.to(device) for key, val in batch["teacher"].items()}
+                tch['y'] = y   # train labels: only used for verified reasoning distillation weights
                 dl, parts = model.distill(out, aux, tch, distill_cfg)
                 for key, val in parts.items():
                     dist_tot[key] = dist_tot.get(key, 0.0) + val * y.size(0)

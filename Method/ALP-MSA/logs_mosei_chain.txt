@@ -4,3 +4,6 @@ EXIT=0
 -rw-rw-r-- 1 muxingyu muxingyu 27280713458 Sep 29 18:17 /media/disk3/muxy/Dataset/MSA_raw_feats/MOSEI/Raw.zip
 19:32:34 extracting (MOSEI Raw.zip is Deflate64: Python zipfile cannot read it)
 19:39:36 decoding
+22800/22856 done, face-detect rate 0.946
+DONE 22856 clips, 0 errors [], face-detect rate 0.946
+23:53:15 waiting for training jobs to finish

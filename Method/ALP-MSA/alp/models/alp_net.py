@@ -70,7 +70,8 @@ class ALPNet(nn.Module):
         # Direction 3: training-only reasoning-distillation heads
         d = getattr(cfg, 'distill', None)
         self.distill = None
-        if d is not None and (d.w_label > 0 or d.w_reason > 0 or d.w_fields > 0):
+        if d is not None and (d.w_label > 0 or d.w_reason > 0 or d.w_fields > 0 or getattr(d, "w_rel", 0) > 0
+                              or getattr(d, "w_hid", 0) > 0):
             from ..distill import DistillHeads
             feat_dim = 2 * D if getattr(m, 'text_residual', False) else D
             self.distill = DistillHeads(feat_dim, D, d.teacher_dim, d.proj_dim)

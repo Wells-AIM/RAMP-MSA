@@ -1,5 +1,1 @@
-# Direction 3 on MOSEI (original ALMT backbone, teacher B = base Omni chain + modality-specific evidence,
-# label score = Omni text-only). 3 seeds; teacher signals on the train split only.
-t3m_none     configs/mosei.yaml
-t3m_label    configs/mosei.yaml distill.teacher_path=/media/disk3/muxy/Dataset/MSA_raw_feats/MOSEI/teacher/teacher_B.npz distill.w_label=0.5
-t3m_all_B    configs/mosei.yaml distill.teacher_path=/media/disk3/muxy/Dataset/MSA_raw_feats/MOSEI/teacher/teacher_B.npz distill.w_label=0.5 distill.w_reason=0.1 distill.w_fields=0.1
+# (moved to exps/queue_d3_mosei_later.txt, run at the end of tools/teacher/omni_ft_chain.sh so the fine-tuned teacher gets the GPUs first)

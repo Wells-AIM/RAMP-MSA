@@ -62,13 +62,20 @@ parser.add_argument("--id_map", type=str, default="datasets/mosi_id_map.json")
 parser.add_argument("--w_label", type=float, default=0.0)
 parser.add_argument("--w_reason", type=float, default=0.0)
 parser.add_argument("--w_fields", type=float, default=0.0)
+parser.add_argument("--w_hid", type=float, default=0.0, help="InfoNCE fused <-> fine-tuned Omni teacher hidden state")
 parser.add_argument("--tau", type=float, default=0.1)
 parser.add_argument("--proj_dim", type=int, default=256)
 parser.add_argument("--teacher_dim", type=int, default=768)
 parser.add_argument("--distill_lr", type=float, default=1e-4, help="lr of the (new) distillation heads")
+# ---- Direction 1: reasoning-aligned representation (verified + relational distillation) ----
+parser.add_argument("--verify_sigma", type=float, default=0.0,
+                    help=">0: weight reasoning terms by exp(-(teacher score-label)^2/2s^2) (train labels)")
+parser.add_argument("--w_rel", type=float, default=0.0, help="relational reasoning distillation weight")
+parser.add_argument("--rel_tau", type=float, default=0.1)
 parser.add_argument("--result_json", type=str, default="", help="write val-selected test metrics here")
 args = parser.parse_args()
-DISTILL = bool(args.teacher_path) and (args.w_label > 0 or args.w_reason > 0 or args.w_fields > 0)
+DISTILL = bool(args.teacher_path) and (args.w_label > 0 or args.w_reason > 0 or args.w_fields > 0
+                                       or args.w_rel > 0 or args.w_hid > 0)
 # Propagate opt-in options to the model (which receives this Namespace as
 # multimodal_config). text_model mirrors --model so the backbone is not
 # hard-coded inside the model.
@@ -192,6 +199,9 @@ def build_teacher(features):
     for f in ("semantic", "prosody", "facial"):
         t[f"z_{f}"] = z[f"z_{f}"][safe].astype(np.float32)
         t[f"has_{f}"] = has & z[f"valid_{f}"][safe]
+    if "z_hid" in z.files:
+        t["z_hid"] = z["z_hid"][safe].astype(np.float16)
+        t["has_hid"] = has & z["valid_hid"][safe]
     print(f"teacher targets for {has.mean():.3f} of train samples", flush=True)
     return {k: torch.as_tensor(v).to(DEVICE) for k, v in t.items()}
 
@@ -329,6 +339,7 @@ def train_epoch(model, train_dataloader, optimizer, scheduler, heads=None):
                 + args.loss_b_ratio * loss_b)  # Eq. (12)
         if heads is not None:   # Direction 3 distillation (train split only)
             teacher = {k: v[index] for k, v in TEACHER.items()}
+            teacher['y'] = label_ids   # train labels: only for verified reasoning distillation weights
             d_loss, _ = heads(logits, aux, teacher, args)
             loss = loss + d_loss
 
@@ -454,7 +465,7 @@ def main():
         json.dump({"seed": args.seed, "best_valid_loss": best_valid_loss,
                    "selected": {"test": dict(zip(names, map(float, best_metrics)))},
                    "last": dict(zip(names, map(float, last_metrics))),
-                   "distill": {k: getattr(args, k) for k in ("teacher_path", "w_label", "w_reason", "w_fields",
+                   "distill": {k: getattr(args, k) for k in ("teacher_path", "w_label", "w_reason", "w_fields", "verify_sigma", "w_rel", "rel_tau", "w_hid",
                                                              "tau", "distill_lr")}},
                   open(args.result_json, "w"), indent=1)
 
