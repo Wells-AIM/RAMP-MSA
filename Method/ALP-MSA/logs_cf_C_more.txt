@@ -1,0 +1,7 @@
+5 jobs
+09:52:35 start cf_C_label 5576 gpu 2
+10:03:29 start cf_C_label 42 gpu 0
+10:04:40 start cf_C_label 2026 gpu 1
+10:11:10 start cf_C_label 128 gpu 2
+10:18:50 start cf_C_label 7 gpu 2
+ALL DONE

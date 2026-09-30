@@ -1,0 +1,20 @@
+10 jobs
+12:09:19 start cf_d1C_r 1111 gpu 0
+12:09:49 start cf_d1C_r 2222 gpu 0
+12:10:19 start cf_d1C_r 3333 gpu 1
+12:10:49 start cf_d1C_r 4444 gpu 1
+12:11:19 start cf_d1C_r 5555 gpu 2
+12:11:49 start cf_d1C_rel 1111 gpu 2
+12:22:10 start cf_d1C_rel 2222 gpu 0
+12:23:10 start cf_d1C_rel 3333 gpu 0
+12:23:40 start cf_d1C_rel 4444 gpu 1
+12:24:10 start cf_d1C_rel 5555 gpu 2
+ALL DONE
+5 jobs
+12:35:31 start cf_d1C_relv 5576 gpu 0
+12:36:01 start cf_d1C_relv 42 gpu 0
+12:36:31 start cf_d1C_relv 2026 gpu 1
+12:37:01 start cf_d1C_relv 128 gpu 1
+12:37:31 start cf_d1C_relv 7 gpu 2
+ALL DONE
+D1B_ALL_DONE

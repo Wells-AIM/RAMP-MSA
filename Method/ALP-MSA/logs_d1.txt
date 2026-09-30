@@ -2,3 +2,43 @@
 09:50:28 start cf_d1C_rv 1111 gpu 0
 09:50:58 start cf_d1C_rv 2222 gpu 0
 09:51:28 start cf_d1C_rv 3333 gpu 1
+09:51:58 start cf_d1C_rv 4444 gpu 1
+09:52:28 start cf_d1C_rv 5555 gpu 2
+09:52:58 start cf_d1C_relv 1111 gpu 2
+10:03:29 start cf_d1C_relv 2222 gpu 0
+10:04:29 start cf_d1C_relv 3333 gpu 0
+10:04:59 start cf_d1C_relv 4444 gpu 1
+10:05:39 start cf_d1C_relv 5555 gpu 1
+ALL DONE
+30 jobs
+10:24:10 start cf_d1_rv 5576 gpu 0
+10:24:40 start cf_d1_rv 42 gpu 0
+10:25:11 start cf_d1_rv 2026 gpu 1
+10:25:41 start cf_d1_rv 128 gpu 1
+10:26:11 start cf_d1_rv 7 gpu 2
+10:26:41 start cf_d1_rv 1111 gpu 2
+10:37:01 start cf_d1_rv 2222 gpu 0
+10:37:52 start cf_d1_rv 3333 gpu 0
+10:38:22 start cf_d1_rv 4444 gpu 1
+10:39:02 start cf_d1_rv 5555 gpu 1
+10:39:32 start cf_d1_rel 5576 gpu 2
+10:40:02 start cf_d1_rel 42 gpu 2
+10:50:13 start cf_d1_rel 2026 gpu 0
+10:51:03 start cf_d1_rel 128 gpu 0
+10:51:33 start cf_d1_rel 7 gpu 1
+10:52:03 start cf_d1_rel 1111 gpu 2
+10:52:43 start cf_d1_rel 2222 gpu 1
+10:53:13 start cf_d1_rel 3333 gpu 2
+11:03:04 start cf_d1_rel 4444 gpu 0
+11:03:54 start cf_d1_rel 5555 gpu 0
+11:04:24 start cf_d1_relv 5576 gpu 1
+11:04:54 start cf_d1_relv 42 gpu 2
+11:05:34 start cf_d1_relv 2026 gpu 1
+11:06:04 start cf_d1_relv 128 gpu 2
+11:16:05 start cf_d1_relv 7 gpu 0
+11:16:45 start cf_d1_relv 1111 gpu 0
+11:17:15 start cf_d1_relv 2222 gpu 1
+11:17:45 start cf_d1_relv 3333 gpu 2
+11:18:35 start cf_d1_relv 4444 gpu 1
+11:19:05 start cf_d1_relv 5555 gpu 2
+ALL DONE

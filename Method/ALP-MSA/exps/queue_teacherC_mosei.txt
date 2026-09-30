@@ -1,0 +1,3 @@
+# MOSEI, ALMT backbone, fine-tuned (3-fold cross-fitted) Omni teacher C. Pair with t3m_none (seeds 1111..3333).
+t3m_C_label configs/mosei.yaml distill.teacher_path=/media/disk3/muxy/Dataset/MSA_raw_feats/MOSEI/teacher/teacher_C.npz distill.w_label=0.5
+t3m_C_hid   configs/mosei.yaml distill.teacher_path=/media/disk3/muxy/Dataset/MSA_raw_feats/MOSEI/teacher/teacher_C.npz distill.w_label=0.5 distill.w_hid=0.1
