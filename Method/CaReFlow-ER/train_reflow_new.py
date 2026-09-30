@@ -98,7 +98,10 @@ parser.add_argument("--er_occ", type=float, default=0.3, help="visual occlusion 
 parser.add_argument("--er_text_mask", type=float, default=0.15, help="text masking fraction")
 parser.add_argument("--er_soft", type=float, default=0.0,
                     help="lambda of error-aware label refinement y' = y + lambda*(y_oof - y) (needs --bank)")
-parser.add_argument("--er_soft_on", type=str, default="bank", choices=["bank", "all"])
+parser.add_argument("--er_soft_on", type=str, default="bank", choices=["bank", "all", "suspect"])
+parser.add_argument("--er_on", type=str, default="bank", choices=["bank", "verified"],
+                    help="which bank samples are recycled as errors (weighting / margin / injection); "
+                         "'verified' = only errors confirmed by an independent teacher")
 parser.add_argument("--er_soft_ref", type=str, default="oof", choices=["oof", "zero"],
                     help="control: 'zero' shrinks targets towards 0 instead of towards the OOF prediction")
 parser.add_argument("--er_start_epoch", type=int, default=0,
@@ -392,12 +395,13 @@ def train_epoch(model, train_dataloader, optimizer, scheduler, heads=None, epoch
             pred, y = logits.view(-1), label_ids.view(-1)
             main_loss = er.weighted_mse(pred, y, index, BANK, args)
             if BANK is not None and args.er_margin > 0:
-                on = BANK.flip[index] if args.er_margin_on == "flip" else BANK.in_bank[index]
+                rec = BANK.recycle(index, args.er_on)
+                on = (BANK.flip[index] & rec) if args.er_margin_on == "flip" else rec
                 main_loss = main_loss + args.er_margin * er.margin_loss(pred, y, on, args.er_margin_m,
                                                                         clamp=args.er_margin_clamp)
             if args.er_perturb > 0:
                 sel = (torch.rand(len(index), generator=ER_GEN, device=DEVICE) < 0.5 if args.er_pert_all
-                       else BANK.in_bank[index])
+                       else BANK.recycle(index, args.er_on))
                 if int(sel.sum()) >= 2:   # the flow losses need >= 2 samples
                     p_ids, p_vis, p_aco = er.perturb(input_ids[sel], input_mask[sel], visual[sel], acoustic[sel],
                                                      PERT_KINDS, MASK_ID, ER_GEN,
@@ -579,7 +583,7 @@ def main():
                    "er": {k: getattr(args, k) for k in ("oof_fold", "oof_nfolds", "oof_seed", "bank", "er_weight",
                                                         "er_margin", "er_margin_m", "er_margin_on", "er_perturb",
                                                         "er_pert_kinds", "er_pert_all", "er_min_sev", "er_start_epoch",
-                                                        "er_soft", "er_soft_on", "er_soft_ref",
+                                                        "er_soft", "er_soft_on", "er_soft_ref", "er_on",
                                                         "er_margin_clamp", "er_noise_rel", "er_occ", "er_text_mask",
                                                         "focal_gamma", "ohem_frac")}},
                   open(args.result_json, "w"), indent=1)

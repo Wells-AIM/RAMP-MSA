@@ -34,16 +34,30 @@ class ErrorBank:
         self.pred = torch.as_tensor(z['pred'], dtype=torch.float32, device=device)   # out-of-fold prediction
         self.flip = torch.as_tensor(z['flip'], dtype=torch.bool, device=device)
         self.in_bank = torch.as_tensor(z['in_bank'], dtype=torch.bool, device=device) & (self.sev >= min_severity)
+        # teacher-verified split (tools/build_error_bank.py --teacher): genuine errors vs suspected label noise
+        self.verified = self.suspect = None
+        if 'verified' in z.files:
+            self.verified = torch.as_tensor(z['verified'], dtype=torch.bool, device=device) & self.in_bank
+            self.suspect = torch.as_tensor(z['suspect'], dtype=torch.bool, device=device) & self.in_bank
+            print(f'error bank: {int(self.verified.sum())} teacher-verified errors, '
+                  f'{int(self.suspect.sum())} suspected noisy labels', flush=True)
         types = z['etype']
         print('error bank: ' + ', '.join(f'{t}={int((types == i).sum())}' for i, t in enumerate(ERROR_TYPES))
               + f' | in bank {int(self.in_bank.sum())}/{n_train}', flush=True)
+
+    def recycle(self, index, on='bank'):
+        """Samples whose errors are recycled (re-weighting, margin, error injection)."""
+        if on == 'verified':
+            assert self.verified is not None, 'bank has no teacher verification (build with --teacher)'
+            return self.verified[index]
+        return self.in_bank[index]
 
 
 def sample_weights(err, index, bank, args):
     """Per-sample loss weights (mean 1 over the batch). err: detached |f(x)-y| of the batch."""
     w = torch.ones_like(err)
     if bank is not None and args.er_weight != 0:   # alpha < 0 down-weights the bank (min weight 1+alpha)
-        w = w + args.er_weight * bank.sev[index] * bank.in_bank[index].float()
+        w = w + args.er_weight * bank.sev[index] * bank.recycle(index, args.er_on).float()
     if args.focal_gamma > 0:                      # baseline: focal-style regression weighting
         w = w * (err + 1e-3) ** args.focal_gamma
     return w / w.mean()
@@ -55,7 +69,13 @@ def soft_target(y, index, bank, args):
     that the label is ambiguous/noisy rather than as a sample to be fitted harder."""
     if bank is None or args.er_soft <= 0:
         return y
-    on = bank.in_bank[index] if args.er_soft_on == 'bank' else torch.ones_like(y, dtype=torch.bool)
+    if args.er_soft_on == 'bank':
+        on = bank.in_bank[index]
+    elif args.er_soft_on == 'suspect':
+        assert bank.suspect is not None, 'bank has no teacher verification (build with --teacher)'
+        on = bank.suspect[index]
+    else:
+        on = torch.ones_like(y, dtype=torch.bool)
     # control: 'zero' shrinks the same samples towards 0 by the same lambda (no per-sample error information)
     ref = bank.pred[index] if args.er_soft_ref == 'oof' else torch.zeros_like(y)
     return y + args.er_soft * (ref - y) * on.float()

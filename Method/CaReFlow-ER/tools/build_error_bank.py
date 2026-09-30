@@ -30,6 +30,9 @@ def main():
     ap.add_argument('--conf', type=float, default=0.5, help='|pred| above which a polarity flip is high-confidence')
     ap.add_argument('--intensity', type=float, default=1.0)
     ap.add_argument('--low_margin', type=float, default=0.2)
+    ap.add_argument('--teacher', default='', help='cross-fitted teacher npz (ids, score) to verify the errors')
+    ap.add_argument('--pkl', default='datasets/mosi.pkl')
+    ap.add_argument('--id_map', default='datasets/mosi_id_map.json')
     opt = ap.parse_args()
 
     parts = [np.load(f) for f in opt.oof]
@@ -52,8 +55,26 @@ def main():
     severity = np.minimum(1.0, err / 2 + 0.5 * flip).astype(np.float32)
     in_bank = (etype > 0) | ((conf < opt.low_margin) & (label != 0))
 
+    extra = {}
+    if opt.teacher:
+        # verified error: an independent (cross-fitted) teacher is closer to the LABEL than the model is,
+        # i.e. the label is trustworthy and the model is wrong.  suspect: the teacher sides with the model.
+        import json
+        import pickle
+        teacher = np.load(opt.teacher)
+        train = pickle.load(open(opt.pkl, 'rb'))['train']
+        assert np.allclose(label, [np.asarray(l).reshape(-1)[0] for (_, l, _) in train]), 'bank/pkl misaligned'
+        id_map = json.load(open(opt.id_map))
+        row = {str(i): k for k, i in enumerate(teacher['ids'])}
+        t_idx = np.array([row.get(id_map.get(seg, ''), -1) for (_, _, seg) in train])
+        t_score = teacher['score'][np.maximum(t_idx, 0)].astype(np.float32)
+        has = (t_idx >= 0) & np.isfinite(t_score)
+        closer = np.abs(t_score - label) < np.abs(t_score - pred)
+        extra = dict(teacher=np.where(has, t_score, np.nan).astype(np.float32),
+                     verified=in_bank & has & closer, suspect=in_bank & has & ~closer)
+
     np.savez(opt.out, label=label, pred=pred, err=err, confidence=conf, flip=flip, etype=etype,
-             severity=severity, in_bank=in_bank)
+             severity=severity, in_bank=in_bank, **extra)
 
     nz = label != 0
     print(f'{n} train samples from {len(parts)} folds | OOF Acc2(non0) {1 - flip[nz].mean():.4f} '
@@ -61,6 +82,11 @@ def main():
     for i, t in enumerate(ERROR_TYPES):
         print(f'  {t:16s} {int((etype == i).sum()):5d}')
     print(f'  in bank          {int(in_bank.sum()):5d}  (mean severity {severity[in_bank].mean():.3f})')
+    if extra:
+        v, s = extra['verified'], extra['suspect']
+        print(f'  teacher-verified errors {int(v.sum())} | suspected label noise {int(s.sum())}')
+        for i, t in enumerate(ERROR_TYPES[1:], 1):
+            print(f'    {t:16s} verified {int((v & (etype == i)).sum()):4d}  suspect {int((s & (etype == i)).sum()):4d}')
     yt = np.clip(np.round(label), -3, 3).astype(int)
     yp = np.clip(np.round(pred), -3, 3).astype(int)
     conf_pairs = collections.Counter((a, b) for a, b in zip(yt, yp) if a != b)
