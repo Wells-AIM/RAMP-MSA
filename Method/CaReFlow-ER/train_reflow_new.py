@@ -1,0 +1,572 @@
+import argparse
+import json
+import os
+import random
+import pickle
+import numpy as np
+from sklearn.metrics import accuracy_score, f1_score
+import torch
+import torch.nn as nn
+from torch.utils.data import DataLoader, TensorDataset
+from tqdm import tqdm
+from torch.nn import MSELoss
+from transformers import (
+    get_linear_schedule_with_warmup,
+    DebertaV2Tokenizer,
+)
+from torch.optim import AdamW
+from model_reflow_new import DeBertaForSequenceClassification
+from distill import DistillHeads
+import er
+import global_configs
+from global_configs import DEVICE
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--model", type=str, default="microsoft/deberta-v3-base")
+parser.add_argument("--dataset", type=str, choices=["mosi", "mosei"], default="mosi")
+parser.add_argument("--max_seq_length", type=int, default=50)
+parser.add_argument("--train_batch_size", type=int, default=50)
+parser.add_argument("--dev_batch_size", type=int, default=128)
+parser.add_argument("--test_batch_size", type=int, default=128)
+parser.add_argument("--n_epochs", type=int, default=50)
+parser.add_argument("--dropout_prob", type=float, default=0.5)
+parser.add_argument("--learning_rate", type=float, default=1e-5)
+parser.add_argument("--gradient_accumulation_step", type=int, default=1)
+parser.add_argument("--warmup_proportion", type=float, default=0.1)
+parser.add_argument("--seed", type=int, default=128)
+parser.add_argument("--inter_dim", default=100, type=int)
+parser.add_argument("--drop_prob", default=0.3, type=float)
+parser.add_argument("--beta_shift", default=1.0, type=float)
+parser.add_argument("--share_dim", default=100, type=int)
+parser.add_argument("--pretrained_epoch", default=30, type=int)
+parser.add_argument("--ratio", default=4, type=int, help="one-to-many ratio beta")
+parser.add_argument("--loss_f_ratio", default=0.005, type=float, help="alpha_f")
+parser.add_argument("--loss_b_ratio", default=0.005, type=float, help="alpha_b")
+parser.add_argument("--dropout_unimodal", default=0.3, type=float)
+parser.add_argument("--transformer_head", default=5, type=int)
+parser.add_argument("--transformer_layer", default=3, type=int)
+parser.add_argument("--kernel_size", default=3, type=int)
+parser.add_argument("--pretrain_iterations", default=300, type=int)
+parser.add_argument("--step_size", default=2, type=int, help="number of Euler steps")
+parser.add_argument("--threshold", default=0.6, type=float)
+parser.add_argument("--margin", default=0.1, type=float)
+parser.add_argument("--eps", default=1e-5, type=float, help="epsilon in eta (Eq. 8)")
+# ---- release-quality options (defaults reproduce the paper) ----
+parser.add_argument("--output_dir", type=str, default="checkpoints")
+parser.add_argument("--save_model", action="store_true",
+                    help="save the best-by-validation checkpoint")
+parser.add_argument("--use_attention_mask", action="store_true",
+                    help="use attention mask in the text encoder and masked pooling")
+# ---- Direction 3: training-only distillation of teacher emotion-evidence reasoning ----
+parser.add_argument("--teacher_path", type=str, default="", help="npz from ALP-MSA tools/teacher/embed_reasoning.py")
+parser.add_argument("--id_map", type=str, default="datasets/mosi_id_map.json")
+parser.add_argument("--w_label", type=float, default=0.0)
+parser.add_argument("--w_reason", type=float, default=0.0)
+parser.add_argument("--w_fields", type=float, default=0.0)
+parser.add_argument("--w_hid", type=float, default=0.0, help="InfoNCE fused <-> fine-tuned Omni teacher hidden state")
+parser.add_argument("--tau", type=float, default=0.1)
+parser.add_argument("--proj_dim", type=int, default=256)
+parser.add_argument("--teacher_dim", type=int, default=768)
+parser.add_argument("--distill_lr", type=float, default=1e-4, help="lr of the (new) distillation heads")
+# ---- Direction 1: reasoning-aligned representation (verified + relational distillation) ----
+parser.add_argument("--verify_sigma", type=float, default=0.0,
+                    help=">0: weight reasoning terms by exp(-(teacher score-label)^2/2s^2) (train labels)")
+parser.add_argument("--w_rel", type=float, default=0.0, help="relational reasoning distillation weight")
+parser.add_argument("--rel_tau", type=float, default=0.1)
+parser.add_argument("--result_json", type=str, default="", help="write val-selected test metrics here")
+# ---- Direction 2.5: Emotion Error Recycling (er.py) ----
+parser.add_argument("--oof_fold", type=int, default=-1,
+                    help="stage 1: >=0 trains on the other folds of the TRAIN split and saves predictions "
+                         "for this held-out fold (oof.npz next to --result_json) at the val-selected epoch")
+parser.add_argument("--oof_nfolds", type=int, default=5)
+parser.add_argument("--oof_seed", type=int, default=0, help="seed of the fold partition (not of training)")
+parser.add_argument("--bank", type=str, default="", help="stage 2: npz from tools/build_error_bank.py")
+parser.add_argument("--er_weight", type=float, default=0.0, help="alpha: loss weight 1+alpha*severity")
+parser.add_argument("--er_margin", type=float, default=0.0, help="weight of the polarity margin loss")
+parser.add_argument("--er_margin_m", type=float, default=0.3)
+parser.add_argument("--er_margin_on", type=str, default="flip", choices=["flip", "bank"],
+                    help="margin on stage-1 polarity flips only, or on every bank sample")
+parser.add_argument("--er_perturb", type=float, default=0.0, help="weight of the perturbed-view loss")
+parser.add_argument("--er_pert_kinds", type=str, default="audio,visual,text,drop,jitter")
+parser.add_argument("--er_pert_all", action="store_true",
+                    help="ablation: error injection on random samples instead of bank samples")
+parser.add_argument("--er_min_sev", type=float, default=0.0)
+parser.add_argument("--focal_gamma", type=float, default=0.0, help="RQ3 baseline: focal regression weighting")
+parser.add_argument("--ohem_frac", type=float, default=0.0, help="RQ3 baseline: online hard example mining")
+args = parser.parse_args()
+ER_ON = bool(args.bank) or args.focal_gamma > 0 or args.ohem_frac > 0 or args.er_perturb > 0
+DISTILL = bool(args.teacher_path) and (args.w_label > 0 or args.w_reason > 0 or args.w_fields > 0
+                                       or args.w_rel > 0 or args.w_hid > 0)
+# Propagate opt-in options to the model (which receives this Namespace as
+# multimodal_config). text_model mirrors --model so the backbone is not
+# hard-coded inside the model.
+args.text_model = args.model
+args.use_attention_mask = args.use_attention_mask
+
+global_configs.set_dataset_config(args.dataset)
+ACOUSTIC_DIM, VISUAL_DIM, TEXT_DIM = (
+    global_configs.ACOUSTIC_DIM,
+    global_configs.VISUAL_DIM,
+    global_configs.TEXT_DIM,
+)
+
+
+class InputFeatures(object):
+    """A single set of features of data."""
+
+    def __init__(self, input_ids, visual, acoustic, input_mask, segment_ids,
+                 label_id, sample_id):
+        self.input_ids = input_ids
+        self.visual = visual
+        self.acoustic = acoustic
+        self.input_mask = input_mask
+        self.segment_ids = segment_ids
+        self.label_id = label_id
+        self.sample_id = sample_id
+
+
+def convert_to_features(examples, max_seq_length, tokenizer):
+    features = []
+    for (ex_index, example) in enumerate(examples):
+        (words, visual, acoustic), label_id, segment = example
+        tokens, inversions = [], []
+        for idx, word in enumerate(words):
+            tokenized = tokenizer.tokenize(word)
+            tokens.extend(tokenized)
+            inversions.extend([idx] * len(tokenized))
+        assert len(tokens) == len(inversions)
+
+        aligned_visual, aligned_audio = [], []
+        for inv_idx in inversions:
+            aligned_visual.append(visual[inv_idx, :])
+            aligned_audio.append(acoustic[inv_idx, :])
+        visual = np.array(aligned_visual)
+        acoustic = np.array(aligned_audio)
+
+        if len(tokens) > max_seq_length - 2:
+            tokens = tokens[: max_seq_length - 2]
+            acoustic = acoustic[: max_seq_length - 2]
+            visual = visual[: max_seq_length - 2]
+
+        input_ids, visual, acoustic, input_mask, segment_ids = prepare_deberta_input(
+            tokens, visual, acoustic, tokenizer
+        )
+
+        assert len(input_ids) == args.max_seq_length
+        assert len(input_mask) == args.max_seq_length
+        assert len(segment_ids) == args.max_seq_length
+        assert acoustic.shape[0] == args.max_seq_length
+        assert visual.shape[0] == args.max_seq_length
+
+        features.append(
+            InputFeatures(
+                input_ids=input_ids,
+                input_mask=input_mask,
+                segment_ids=segment_ids,
+                visual=visual,
+                acoustic=acoustic,
+                label_id=label_id,
+                sample_id=segment,
+            )
+        )
+    return features
+
+
+def prepare_deberta_input(tokens, visual, acoustic, tokenizer):
+    CLS, SEP = tokenizer.cls_token, tokenizer.sep_token
+    tokens = [CLS] + tokens + [SEP]
+    acoustic_zero = np.zeros((1, ACOUSTIC_DIM))
+    acoustic = np.concatenate((acoustic_zero, acoustic, acoustic_zero))
+    visual_zero = np.zeros((1, VISUAL_DIM))
+    visual = np.concatenate((visual_zero, visual, visual_zero))
+
+    input_ids = tokenizer.convert_tokens_to_ids(tokens)
+    segment_ids = [0] * len(input_ids)
+    input_mask = [1] * len(input_ids)
+    pad_length = args.max_seq_length - len(input_ids)
+
+    acoustic = np.concatenate((acoustic, np.zeros((pad_length, ACOUSTIC_DIM))))
+    visual = np.concatenate((visual, np.zeros((pad_length, VISUAL_DIM))))
+    padding = [0] * pad_length
+    input_ids += padding
+    input_mask += padding
+    segment_ids += padding
+    return input_ids, visual, acoustic, input_mask, segment_ids
+
+
+def get_tokenizer(model):
+    return DebertaV2Tokenizer.from_pretrained(model)
+
+
+# Shared sample-id bookkeeping across train/dev/test splits.
+sample_dict, sample_dict2 = {}, {}
+
+
+TEACHER = None   # Direction 3: teacher targets for the TRAIN split, indexed by dataset position
+
+
+def build_teacher(features):
+    """Align teacher npz rows (MMSA ids) to CaReFlow train features via the segment-id map."""
+    id_map = json.load(open(args.id_map))
+    z = np.load(args.teacher_path)
+    row = {str(i): k for k, i in enumerate(z["ids"])}
+    idx = np.array([row.get(id_map.get(f.sample_id, ""), -1) for f in features])
+    has = idx >= 0
+    safe = np.where(has, idx, 0)
+    t = {"score": np.nan_to_num(z["score"][safe]).astype(np.float32),
+         "has_score": has & np.isfinite(z["score"][safe]),
+         "z_all": z["z_all"][safe].astype(np.float32),
+         "has_all": has & (z["valid_all"][safe] if "valid_all" in z.files else True)}
+    for f in ("semantic", "prosody", "facial"):
+        t[f"z_{f}"] = z[f"z_{f}"][safe].astype(np.float32)
+        t[f"has_{f}"] = has & z[f"valid_{f}"][safe]
+    if "z_hid" in z.files:
+        t["z_hid"] = z["z_hid"][safe].astype(np.float16)
+        t["has_hid"] = has & z["valid_hid"][safe]
+    if "score_verify" in z.files:   # Direction 1: conclusion of the reasoning chain, used to verify it
+        t["score_verify"] = np.nan_to_num(z["score_verify"][safe]).astype(np.float32)
+        t["has_score_verify"] = has & np.isfinite(z["score_verify"][safe])
+    print(f"teacher targets for {has.mean():.3f} of train samples", flush=True)
+    return {k: torch.as_tensor(v).to(DEVICE) for k, v in t.items()}
+
+
+def get_appropriate_dataset(data, split=None):
+    global TEACHER
+    tokenizer = get_tokenizer(args.model)
+    features = convert_to_features(data, args.max_seq_length, tokenizer)
+    if split == "train" and DISTILL:
+        TEACHER = build_teacher(features)
+    all_input_ids = torch.tensor(np.array([f.input_ids for f in features]), dtype=torch.long)
+    all_input_mask = torch.tensor(np.array([f.input_mask for f in features]), dtype=torch.long)
+    all_visual = torch.tensor(np.array([f.visual for f in features]), dtype=torch.float)
+    all_acoustic = torch.tensor(np.array([f.acoustic for f in features]), dtype=torch.float)
+    all_label_ids = torch.tensor(np.array([f.label_id for f in features]), dtype=torch.float)
+    '''
+    for f in features:
+        if f.sample_id not in sample_dict2:
+            new_id = len(sample_dict)
+            sample_dict2[f.sample_id] = new_id
+            sample_dict[new_id] = f.sample_id
+    all_sample_ids = torch.tensor(
+        np.array([sample_dict2[f.sample_id] for f in features]), dtype=torch.float
+    )
+    '''
+   # all_sample_ids = {}
+    all_index = torch.arange(len(features), dtype=torch.long)   # position -> teacher row (train only)
+    return TensorDataset(
+        all_input_ids, all_visual, all_acoustic, all_label_ids, all_input_mask, all_index,
+    )
+
+
+def set_up_data_loader():
+    with open(f"datasets/{args.dataset}.pkl", "rb") as handle:
+        data = pickle.load(handle)
+    train_data, dev_data, test_data = data["train"], data["dev"], data["test"]
+    train_dataset = get_appropriate_dataset(train_data, split="train")
+    dev_dataset = get_appropriate_dataset(dev_data)
+    test_dataset = get_appropriate_dataset(test_data)
+
+    global HELDOUT_LOADER, BANK
+    HELDOUT_LOADER, BANK = None, None
+    if args.oof_fold >= 0:   # stage 1 of error recycling: hold one fold of TRAIN out
+        n = len(train_dataset)
+        folds = np.array_split(np.random.RandomState(args.oof_seed).permutation(n), args.oof_nfolds)
+        held = np.sort(folds[args.oof_fold])
+        keep = np.setdiff1d(np.arange(n), held)
+        global HELD_IDX
+        HELD_IDX = held
+        HELDOUT_LOADER = DataLoader(torch.utils.data.Subset(train_dataset, held.tolist()),
+                                    batch_size=args.test_batch_size, shuffle=False)
+        train_dataset = torch.utils.data.Subset(train_dataset, keep.tolist())
+        print(f"OOF fold {args.oof_fold}/{args.oof_nfolds}: train {len(keep)}, held out {len(held)}", flush=True)
+    if args.bank:
+        BANK = er.ErrorBank(args.bank, len(train_dataset), DEVICE, args.er_min_sev)
+
+    num_train_optimization_steps = (
+        int(len(train_dataset) / args.train_batch_size /
+            args.gradient_accumulation_step) * args.n_epochs
+    )
+    train_dataloader = DataLoader(
+        train_dataset, batch_size=args.train_batch_size, shuffle=True, drop_last=True
+    )
+    dev_dataloader = DataLoader(
+        dev_dataset, batch_size=args.dev_batch_size, shuffle=False
+    )
+    test_dataloader = DataLoader(
+        test_dataset, batch_size=args.test_batch_size, shuffle=False
+    )
+    return (train_dataloader, dev_dataloader, test_dataloader,
+            num_train_optimization_steps)
+
+
+def set_random_seed(seed: int):
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.enabled = False
+    torch.backends.cudnn.deterministic = True
+    random.seed(seed)
+    os.environ["PYTHONHASHSEED"] = str(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    print("Seed: {}".format(seed))
+
+
+def prep_for_training(num_train_optimization_steps: int):
+    model = DeBertaForSequenceClassification.from_pretrained(
+        args.model, multimodal_config=args, num_labels=1,
+    )
+    model.to(DEVICE)
+
+    no_decay = ["bias", "LayerNorm.bias", "LayerNorm.weight"]
+    param_optimizer = list(model.named_parameters())
+    optimizer_grouped_parameters = [
+        {"params": [p for n, p in param_optimizer
+                    if not any(nd in n for nd in no_decay)],
+         "weight_decay": 0.01},
+        {"params": [p for n, p in param_optimizer
+                    if any(nd in n for nd in no_decay)],
+         "weight_decay": 0.0},
+    ]
+    heads = None
+    if DISTILL:
+        # separate RNG stream: the heads' init must not change data order / dropout vs. the baseline seed
+        with torch.random.fork_rng(devices=[DEVICE]):
+            torch.manual_seed(args.seed + 1000)
+            heads = DistillHeads(args.share_dim, args.share_dim, args.teacher_dim, args.proj_dim).to(DEVICE)
+        optimizer_grouped_parameters.append(
+            {"params": list(heads.parameters()), "weight_decay": 0.01, "lr": args.distill_lr})
+    optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate)
+    scheduler = get_linear_schedule_with_warmup(
+        optimizer,
+        num_warmup_steps=int(args.warmup_proportion * num_train_optimization_steps),
+        num_training_steps=num_train_optimization_steps,
+    )
+    return model, optimizer, scheduler, heads
+
+
+def batch_minmax(x):
+    """Per-batch min-max normalization (matches the released pipeline).
+
+    Caveat: statistics are computed per batch, so train/eval use different
+    batch sizes. Kept for exact reproducibility; +1e-8 only guards against
+    division by zero on a constant batch.
+    """
+    return (x - x.min()) / (x.max() - x.min() + 1e-8)
+
+
+def train_epoch(model, train_dataloader, optimizer, scheduler, heads=None):
+    model.train()
+    tr_loss, nb_tr_steps = 0.0, 0
+    total_loss_f, total_loss_b = [], []
+    for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration")):
+        batch = tuple(t.to(DEVICE) for t in batch)
+        input_ids, visual, acoustic, label_ids, input_mask, index = batch
+        visual = batch_minmax(torch.squeeze(visual, 1))
+        acoustic = batch_minmax(torch.squeeze(acoustic, 1))
+
+        if heads is not None:
+            logits, loss_f, loss_b, aux = model(
+                input_ids, visual, acoustic, label_ids, input_mask=input_mask, return_aux=True
+            )
+        else:
+            logits, loss_f, loss_b = model(
+                input_ids, visual, acoustic, label_ids, input_mask=input_mask
+            )
+        if ER_ON:   # Direction 2.5 (all terms training-only)
+            pred, y = logits.view(-1), label_ids.view(-1)
+            main_loss = er.weighted_mse(pred, y, index, BANK, args)
+            if BANK is not None and args.er_margin > 0:
+                on = BANK.flip[index] if args.er_margin_on == "flip" else BANK.in_bank[index]
+                main_loss = main_loss + args.er_margin * er.margin_loss(pred, y, on, args.er_margin_m)
+            if args.er_perturb > 0:
+                sel = (torch.rand(len(index), generator=ER_GEN, device=DEVICE) < 0.5 if args.er_pert_all
+                       else BANK.in_bank[index])
+                if int(sel.sum()) >= 2:   # the flow losses need >= 2 samples
+                    p_ids, p_vis, p_aco = er.perturb(input_ids[sel], input_mask[sel], visual[sel], acoustic[sel],
+                                                     PERT_KINDS, MASK_ID, ER_GEN)
+                    p_logits, p_lf, p_lb = model(p_ids, p_vis, p_aco, label_ids[sel], input_mask=input_mask[sel])
+                    p_pred, p_y = p_logits.view(-1), label_ids[sel].view(-1)
+                    p_loss = MSELoss()(p_pred, p_y)
+                    if args.er_margin > 0:
+                        p_loss = p_loss + args.er_margin * er.margin_loss(
+                            p_pred, p_y, torch.ones_like(p_y, dtype=torch.bool), args.er_margin_m)
+                    main_loss = main_loss + args.er_perturb * p_loss
+        else:
+            main_loss = MSELoss()(logits.view(-1), label_ids.view(-1))
+        loss = (main_loss
+                + args.loss_f_ratio * loss_f
+                + args.loss_b_ratio * loss_b)  # Eq. (12)
+        if heads is not None:   # Direction 3 distillation (train split only)
+            teacher = {k: v[index] for k, v in TEACHER.items()}
+            teacher['y'] = label_ids   # train labels: only for verified reasoning distillation weights
+            d_loss, _ = heads(logits, aux, teacher, args)
+            loss = loss + d_loss
+
+        if args.gradient_accumulation_step > 1:
+            loss = loss / args.gradient_accumulation_step
+        loss.backward()
+        tr_loss += loss.item()
+        nb_tr_steps += 1
+        total_loss_f.append(loss_f.item() if torch.is_tensor(loss_f) else loss_f)
+        total_loss_b.append(loss_b.item() if torch.is_tensor(loss_b) else loss_b)
+
+        if (step + 1) % args.gradient_accumulation_step == 0:
+            optimizer.step()
+            scheduler.step()
+            optimizer.zero_grad()
+    return tr_loss / nb_tr_steps, total_loss_f, total_loss_b
+
+
+def _forward_eval(model, batch):
+    input_ids, visual, acoustic, label_ids, input_mask = batch[:5]
+    visual = batch_minmax(torch.squeeze(visual, 1))
+    acoustic = batch_minmax(torch.squeeze(acoustic, 1))
+    return model(input_ids, visual, acoustic, label_ids, input_mask=input_mask)
+
+
+def eval_epoch(model, dev_dataloader):
+    model.eval()
+    dev_loss, nb_dev_steps = 0.0, 0
+    with torch.no_grad():
+        for batch in tqdm(dev_dataloader, desc="Iteration"):
+            batch = tuple(t.to(DEVICE) for t in batch)
+            label_ids = batch[3]
+            logits, _, _ = _forward_eval(model, batch)
+            loss = MSELoss()(logits.view(-1), label_ids.view(-1))
+            dev_loss += loss.item()
+            nb_dev_steps += 1
+    return dev_loss / nb_dev_steps
+
+
+def test_epoch(model, test_dataloader):
+    model.eval()
+    preds, labels = [], []
+    with torch.no_grad():
+        for batch in tqdm(test_dataloader):
+            batch = tuple(t.to(DEVICE) for t in batch)
+            label_ids = batch[3]
+            logits, _, _ = _forward_eval(model, batch)
+            preds.extend(np.squeeze(logits.detach().cpu().numpy()).tolist())
+            labels.extend(np.squeeze(label_ids.detach().cpu().numpy()).tolist())
+    return np.array(preds), np.array(labels)
+
+
+def predict_loader(model, loader):
+    """Like test_epoch, but safe for a final batch of size 1 (no np.squeeze)."""
+    model.eval()
+    preds, labels = [], []
+    with torch.no_grad():
+        for batch in loader:
+            batch = tuple(t.to(DEVICE) for t in batch)
+            logits, _, _ = _forward_eval(model, batch)
+            preds.append(logits.view(-1).cpu().numpy())
+            labels.append(batch[3].view(-1).cpu().numpy())
+    return np.concatenate(preds), np.concatenate(labels)
+
+
+def multiclass_acc(preds, truths):
+    return np.sum(np.round(preds) == np.round(truths)) / float(len(truths))
+
+
+def test_score_model(model, test_dataloader, use_zero=False):
+    preds, y_test = test_epoch(model, test_dataloader)
+    non_zeros = np.array([i for i, e in enumerate(y_test) if e != 0 or use_zero])
+    mult_a7 = multiclass_acc(
+        np.clip(preds, -3.0, 3.0), np.clip(y_test, -3.0, 3.0)
+    )
+    mae_non = np.mean(np.absolute(preds - y_test))
+    corr_non = np.corrcoef(preds, y_test)[0][1]
+
+    preds, y_test = preds[non_zeros], y_test[non_zeros]
+    mae = np.mean(np.absolute(preds - y_test))
+    corr = np.corrcoef(preds, y_test)[0][1]
+    preds, y_test = preds >= 0, y_test >= 0
+    return (accuracy_score(y_test, preds), mae, corr,
+            f1_score(y_test, preds, average="weighted"),
+            mult_a7, mae_non, corr_non)
+
+
+def train(model, train_dataloader, validation_dataloader, test_data_loader,
+          optimizer, scheduler, heads=None):
+    best_valid_loss = float("inf")
+    best_metrics = None
+    last_metrics = None
+    for epoch_i in range(int(args.n_epochs)):
+        train_loss, _, _ = train_epoch(
+            model, train_dataloader, optimizer, scheduler, heads
+        )
+        valid_loss = eval_epoch(model, validation_dataloader)
+        print("TRAIN: epoch:{}, train_loss:{}, valid_loss:{}".format(
+            epoch_i + 1, train_loss, valid_loss))
+
+        (test_acc, test_mae, test_corr, test_f_score, mult_a7,
+         test_mae_non, test_corr_non) = test_score_model(model, test_data_loader)
+        last_metrics = (test_acc, test_mae, test_corr, test_f_score, mult_a7)
+        print(
+            "TEST: train_loss:{}, valid_loss:{}, test_acc:{}, mae:{}, corr:{}, "
+            "f1_score:{}, mult_a7:{}, mae_non:{}, corr_non:{}".format(
+                train_loss, valid_loss, test_acc, test_mae, test_corr,
+                test_f_score, mult_a7, test_mae_non, test_corr_non))
+
+        if valid_loss < best_valid_loss:
+            best_valid_loss = valid_loss
+            best_metrics = (test_acc, test_mae_non, test_corr_non,
+                            test_f_score, mult_a7)
+            if HELDOUT_LOADER is not None:   # stage 1: out-of-fold predictions of the selected epoch
+                global OOF
+                oof_pred, oof_y = predict_loader(model, HELDOUT_LOADER)
+                OOF = {"index": HELD_IDX, "pred": oof_pred, "label": oof_y, "epoch": epoch_i + 1}
+            if args.save_model:
+                os.makedirs(args.output_dir, exist_ok=True)
+                ckpt = os.path.join(
+                    args.output_dir, f"careflow_{args.dataset}_best.pt")
+                torch.save(model.state_dict(), ckpt)
+                print("Saved best checkpoint to", ckpt)
+
+        print("BEST TEST: best_acc:{}, best_mae_non:{}, best_corr_non:{}, "
+              "best_f1_score:{}, best_acc7:{}".format(*best_metrics))
+    return best_valid_loss, best_metrics, last_metrics
+
+
+HELDOUT_LOADER, HELD_IDX, OOF, BANK = None, None, None, None
+ER_GEN, PERT_KINDS, MASK_ID = None, (), None
+
+
+def main():
+    global ER_GEN, PERT_KINDS, MASK_ID
+    set_random_seed(args.seed)
+    (train_data_loader, dev_data_loader, test_data_loader,
+     num_train_optimization_steps) = set_up_data_loader()
+    if args.er_perturb > 0:
+        if not (args.bank or args.er_pert_all):
+            raise ValueError("--er_perturb needs --bank (or --er_pert_all)")
+        # separate generator: the choice of perturbations does not consume the global RNG
+        ER_GEN = torch.Generator(device=DEVICE)
+        ER_GEN.manual_seed(args.seed + 2000)
+        PERT_KINDS = tuple(k for k in args.er_pert_kinds.split(",") if k)
+        MASK_ID = get_tokenizer(args.model).mask_token_id
+    model, optimizer, scheduler, heads = prep_for_training(num_train_optimization_steps)
+    best_valid_loss, best_metrics, last_metrics = train(
+        model, train_data_loader, dev_data_loader, test_data_loader, optimizer, scheduler, heads)
+    if args.result_json:
+        names = ("Non0_acc_2", "MAE", "Corr", "Non0_F1", "Acc_7")
+        os.makedirs(os.path.dirname(args.result_json) or ".", exist_ok=True)
+        json.dump({"seed": args.seed, "best_valid_loss": best_valid_loss,
+                   "selected": {"test": dict(zip(names, map(float, best_metrics)))},
+                   "last": dict(zip(names, map(float, last_metrics))),
+                   "distill": {k: getattr(args, k) for k in ("teacher_path", "w_label", "w_reason", "w_fields", "verify_sigma", "w_rel", "rel_tau", "w_hid",
+                                                             "tau", "distill_lr")},
+                   "er": {k: getattr(args, k) for k in ("oof_fold", "oof_nfolds", "oof_seed", "bank", "er_weight",
+                                                        "er_margin", "er_margin_m", "er_margin_on", "er_perturb",
+                                                        "er_pert_kinds", "er_pert_all", "er_min_sev",
+                                                        "focal_gamma", "ohem_frac")}},
+                  open(args.result_json, "w"), indent=1)
+    if OOF is not None:
+        path = os.path.join(os.path.dirname(args.result_json) or ".", "oof.npz")
+        np.savez(path, fold=args.oof_fold, nfolds=args.oof_nfolds, oof_seed=args.oof_seed, **OOF)
+        print("saved out-of-fold predictions to", path, flush=True)
+
+
+if __name__ == "__main__":
+    main()
