@@ -9,7 +9,7 @@ OUT=$D/teacher/omni_ft
 LIGHT=$D/mosei_light.pkl
 mkdir -p $OUT
 until grep -q "D1B_ALL_DONE" logs_d1b.txt 2>/dev/null; do sleep 120; done
-while pgrep -f "tools/grid.py" >/dev/null; do sleep 60; done
+while pgrep -f "^/media/disk3/muxy/envs/HME/bin/python tools/grid.py" >/dev/null; do sleep 60; done   # anchored: the tmux server cmdline also contains "tools/grid.py"
 echo "$(date +%T) MOSEI fine-tuning (3 folds)"
 for f in 0 1 2; do CUDA_VISIBLE_DEVICES=$f $PY tools/teacher/finetune_omni.py --pkl $LIGHT --fold $f --nfolds 3 --epochs 2 \
     --mode text --out_dir $OUT > $OUT/text_fold$f.log 2>&1 & done
