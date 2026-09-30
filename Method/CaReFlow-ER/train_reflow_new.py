@@ -91,6 +91,11 @@ parser.add_argument("--er_pert_kinds", type=str, default="audio,visual,text,drop
 parser.add_argument("--er_pert_all", action="store_true",
                     help="ablation: error injection on random samples instead of bank samples")
 parser.add_argument("--er_min_sev", type=float, default=0.0)
+parser.add_argument("--er_margin_clamp", action="store_true", help="margin m_i = min(m, |y_i|)")
+parser.add_argument("--er_noise_rel", type=float, default=-1.0,
+                    help=">0: audio noise std = this x per-dim std of the batch (default: legacy absolute 0.1)")
+parser.add_argument("--er_occ", type=float, default=0.3, help="visual occlusion fraction")
+parser.add_argument("--er_text_mask", type=float, default=0.15, help="text masking fraction")
 parser.add_argument("--er_soft", type=float, default=0.0,
                     help="lambda of error-aware label refinement y' = y + lambda*(y_oof - y) (needs --bank)")
 parser.add_argument("--er_soft_on", type=str, default="bank", choices=["bank", "all"])
@@ -388,19 +393,23 @@ def train_epoch(model, train_dataloader, optimizer, scheduler, heads=None, epoch
             main_loss = er.weighted_mse(pred, y, index, BANK, args)
             if BANK is not None and args.er_margin > 0:
                 on = BANK.flip[index] if args.er_margin_on == "flip" else BANK.in_bank[index]
-                main_loss = main_loss + args.er_margin * er.margin_loss(pred, y, on, args.er_margin_m)
+                main_loss = main_loss + args.er_margin * er.margin_loss(pred, y, on, args.er_margin_m,
+                                                                        clamp=args.er_margin_clamp)
             if args.er_perturb > 0:
                 sel = (torch.rand(len(index), generator=ER_GEN, device=DEVICE) < 0.5 if args.er_pert_all
                        else BANK.in_bank[index])
                 if int(sel.sum()) >= 2:   # the flow losses need >= 2 samples
                     p_ids, p_vis, p_aco = er.perturb(input_ids[sel], input_mask[sel], visual[sel], acoustic[sel],
-                                                     PERT_KINDS, MASK_ID, ER_GEN)
+                                                     PERT_KINDS, MASK_ID, ER_GEN,
+                                                     noise_rel=args.er_noise_rel if args.er_noise_rel > 0 else None,
+                                                     occ=args.er_occ, text_mask=args.er_text_mask)
                     p_logits, p_lf, p_lb = model(p_ids, p_vis, p_aco, label_ids[sel], input_mask=input_mask[sel])
                     p_pred, p_y = p_logits.view(-1), label_ids[sel].view(-1)
                     p_loss = MSELoss()(p_pred, p_y)
                     if args.er_margin > 0:
                         p_loss = p_loss + args.er_margin * er.margin_loss(
-                            p_pred, p_y, torch.ones_like(p_y, dtype=torch.bool), args.er_margin_m)
+                            p_pred, p_y, torch.ones_like(p_y, dtype=torch.bool), args.er_margin_m,
+                            clamp=args.er_margin_clamp)
                     main_loss = main_loss + args.er_perturb * p_loss
         else:
             main_loss = MSELoss()(logits.view(-1), label_ids.view(-1))
@@ -571,6 +580,7 @@ def main():
                                                         "er_margin", "er_margin_m", "er_margin_on", "er_perturb",
                                                         "er_pert_kinds", "er_pert_all", "er_min_sev", "er_start_epoch",
                                                         "er_soft", "er_soft_on", "er_soft_ref",
+                                                        "er_margin_clamp", "er_noise_rel", "er_occ", "er_text_mask",
                                                         "focal_gamma", "ohem_frac")}},
                   open(args.result_json, "w"), indent=1)
     if OOF is not None:
