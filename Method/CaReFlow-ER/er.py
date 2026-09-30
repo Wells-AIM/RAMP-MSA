@@ -31,6 +31,7 @@ class ErrorBank:
         z = np.load(path)
         assert len(z['label']) == n_train, f'bank has {len(z["label"])} rows, train split has {n_train}'
         self.sev = torch.as_tensor(z['severity'], dtype=torch.float32, device=device)
+        self.pred = torch.as_tensor(z['pred'], dtype=torch.float32, device=device)   # out-of-fold prediction
         self.flip = torch.as_tensor(z['flip'], dtype=torch.bool, device=device)
         self.in_bank = torch.as_tensor(z['in_bank'], dtype=torch.bool, device=device) & (self.sev >= min_severity)
         types = z['etype']
@@ -41,14 +42,27 @@ class ErrorBank:
 def sample_weights(err, index, bank, args):
     """Per-sample loss weights (mean 1 over the batch). err: detached |f(x)-y| of the batch."""
     w = torch.ones_like(err)
-    if bank is not None and args.er_weight > 0:
+    if bank is not None and args.er_weight != 0:   # alpha < 0 down-weights the bank (min weight 1+alpha)
         w = w + args.er_weight * bank.sev[index] * bank.in_bank[index].float()
     if args.focal_gamma > 0:                      # baseline: focal-style regression weighting
         w = w * (err + 1e-3) ** args.focal_gamma
     return w / w.mean()
 
 
+def soft_target(y, index, bank, args):
+    """Error-aware label refinement: move the target of (bank) samples towards the cross-fitted
+    out-of-fold prediction, y' = y + lambda * (y_oof - y).  The stage-1 error is read as evidence
+    that the label is ambiguous/noisy rather than as a sample to be fitted harder."""
+    if bank is None or args.er_soft <= 0:
+        return y
+    on = bank.in_bank[index] if args.er_soft_on == 'bank' else torch.ones_like(y, dtype=torch.bool)
+    # control: 'zero' shrinks the same samples towards 0 by the same lambda (no per-sample error information)
+    ref = bank.pred[index] if args.er_soft_ref == 'oof' else torch.zeros_like(y)
+    return y + args.er_soft * (ref - y) * on.float()
+
+
 def weighted_mse(pred, y, index, bank, args):
+    y = soft_target(y, index, bank, args)
     e2 = (pred - y) ** 2
     if args.ohem_frac > 0:                        # baseline: online hard example mining
         k = max(1, int(round(args.ohem_frac * e2.numel())))

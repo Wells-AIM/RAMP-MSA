@@ -91,6 +91,13 @@ parser.add_argument("--er_pert_kinds", type=str, default="audio,visual,text,drop
 parser.add_argument("--er_pert_all", action="store_true",
                     help="ablation: error injection on random samples instead of bank samples")
 parser.add_argument("--er_min_sev", type=float, default=0.0)
+parser.add_argument("--er_soft", type=float, default=0.0,
+                    help="lambda of error-aware label refinement y' = y + lambda*(y_oof - y) (needs --bank)")
+parser.add_argument("--er_soft_on", type=str, default="bank", choices=["bank", "all"])
+parser.add_argument("--er_soft_ref", type=str, default="oof", choices=["oof", "zero"],
+                    help="control: 'zero' shrinks targets towards 0 instead of towards the OOF prediction")
+parser.add_argument("--er_start_epoch", type=int, default=0,
+                    help="0-based epoch from which the error-recycling / baseline terms are switched on")
 parser.add_argument("--focal_gamma", type=float, default=0.0, help="RQ3 baseline: focal regression weighting")
 parser.add_argument("--ohem_frac", type=float, default=0.0, help="RQ3 baseline: online hard example mining")
 args = parser.parse_args()
@@ -355,7 +362,10 @@ def batch_minmax(x):
     return (x - x.min()) / (x.max() - x.min() + 1e-8)
 
 
-def train_epoch(model, train_dataloader, optimizer, scheduler, heads=None):
+def train_epoch(model, train_dataloader, optimizer, scheduler, heads=None, epoch=0):
+    # Direction 2.5 is a SECOND stage: before --er_start_epoch the official loss is used unchanged
+    # (no extra RNG draws), so a run follows the baseline trajectory of the same seed until then.
+    er_active = ER_ON and epoch >= args.er_start_epoch
     model.train()
     tr_loss, nb_tr_steps = 0.0, 0
     total_loss_f, total_loss_b = [], []
@@ -373,7 +383,7 @@ def train_epoch(model, train_dataloader, optimizer, scheduler, heads=None):
             logits, loss_f, loss_b = model(
                 input_ids, visual, acoustic, label_ids, input_mask=input_mask
             )
-        if ER_ON:   # Direction 2.5 (all terms training-only)
+        if er_active:   # Direction 2.5 (all terms training-only)
             pred, y = logits.view(-1), label_ids.view(-1)
             main_loss = er.weighted_mse(pred, y, index, BANK, args)
             if BANK is not None and args.er_margin > 0:
@@ -494,7 +504,7 @@ def train(model, train_dataloader, validation_dataloader, test_data_loader,
     last_metrics = None
     for epoch_i in range(int(args.n_epochs)):
         train_loss, _, _ = train_epoch(
-            model, train_dataloader, optimizer, scheduler, heads
+            model, train_dataloader, optimizer, scheduler, heads, epoch=epoch_i
         )
         valid_loss = eval_epoch(model, validation_dataloader)
         print("TRAIN: epoch:{}, train_loss:{}, valid_loss:{}".format(
@@ -559,7 +569,8 @@ def main():
                                                              "tau", "distill_lr")},
                    "er": {k: getattr(args, k) for k in ("oof_fold", "oof_nfolds", "oof_seed", "bank", "er_weight",
                                                         "er_margin", "er_margin_m", "er_margin_on", "er_perturb",
-                                                        "er_pert_kinds", "er_pert_all", "er_min_sev",
+                                                        "er_pert_kinds", "er_pert_all", "er_min_sev", "er_start_epoch",
+                                                        "er_soft", "er_soft_on", "er_soft_ref",
                                                         "focal_gamma", "ohem_frac")}},
                   open(args.result_json, "w"), indent=1)
     if OOF is not None:
