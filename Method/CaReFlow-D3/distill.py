@@ -66,8 +66,10 @@ def verify_weight(teacher, sigma):
     if sigma <= 0 or 'y' not in teacher:
         return None
     y = teacher['y'].view(-1).float()
-    w = torch.exp(-(teacher['score'].float() - y) ** 2 / (2 * sigma ** 2))
-    return torch.where(teacher['has_score'], w, torch.zeros_like(w)).detach()
+    # score_verify (if given) = conclusion of the distilled reasoning chain; otherwise the teacher score
+    key = 'score_verify' if 'score_verify' in teacher else 'score'
+    w = torch.exp(-(teacher[key].float() - y) ** 2 / (2 * sigma ** 2))
+    return torch.where(teacher['has_' + key], w, torch.zeros_like(w)).detach()
 
 
 class DistillHeads(nn.Module):

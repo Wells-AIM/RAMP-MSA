@@ -7,3 +7,31 @@ EXIT=0
 22800/22856 done, face-detect rate 0.946
 DONE 22856 clips, 0 errors [], face-detect rate 0.946
 23:53:15 waiting for training jobs to finish
+00:39:17 teachers
+    22856 /media/disk3/muxy/Dataset/MSA_raw_feats/MOSEI/teacher/facial_omni.jsonl
+    22856 /media/disk3/muxy/Dataset/MSA_raw_feats/MOSEI/teacher/prosody_et.jsonl
+    22856 /media/disk3/muxy/Dataset/MSA_raw_feats/MOSEI/teacher/semantic_omni.jsonl
+    22856 /media/disk3/muxy/Dataset/MSA_raw_feats/MOSEI/teacher/whole_omni.jsonl
+    91424 total
+03:15:13 eval + vectors
+semantic_omni.jsonl      n=22856 parsed=1.00
+    train n=12776 acc2(non0)=0.729 corr=0.714 MAE=1.173 score std=2.02
+    valid n=1438 acc2(non0)=0.732 corr=0.705 MAE=1.214 score std=2.00
+    test  n=3633 acc2(non0)=0.738 corr=0.721 MAE=1.192 score std=2.05
+prosody_et.jsonl         n=22856 parsed=1.00
+    train n=12784 acc2(non0)=0.548 corr=0.115 MAE=1.711 score std=1.33
+    valid n=1438 acc2(non0)=0.514 corr=0.123 MAE=1.504 score std=1.26
+    test  n=3633 acc2(non0)=0.559 corr=0.133 MAE=1.666 score std=1.33
+facial_omni.jsonl        n=22856 parsed=1.00
+    train n=12774 acc2(non0)=0.626 corr=0.117 MAE=1.372 score std=0.96
+    valid n=1437 acc2(non0)=0.619 corr=0.039 MAE=1.331 score std=0.95
+    test  n=3631 acc2(non0)=0.624 corr=0.126 MAE=1.377 score std=0.98
+whole_omni.jsonl         n=22856 parsed=1.00
+    train n=12786 acc2(non0)=0.753 corr=0.690 MAE=0.886 score std=1.55
+    valid n=1438 acc2(non0)=0.739 corr=0.659 MAE=0.887 score std=1.47
+    test  n=3634 acc2(non0)=0.755 corr=0.695 MAE=0.886 score std=1.55
+saved /media/disk3/muxy/Dataset/MSA_raw_feats/MOSEI/teacher/teacher_B.npz {'ids': (22856,), 'split': (22856,), 'score': (22856,), 'score_semantic': (22856,), 'score_prosody': (22856,), 'score_facial': (22856,), 'valid_all': (22856,), 'z_all': (22856, 768), 'z_semantic': (22856, 768), 'valid_semantic': (22856,), 'z_prosody': (22856, 768), 'valid_prosody': (22856,), 'z_facial': (22856, 768), 'valid_facial': (22856,), 'z_consistency': (22856, 768), 'valid_consistency': (22856,), 'z_conclusion': (22856, 768), 'valid_conclusion': (22856,)} {'semantic': 1.0, 'prosody': 1.0, 'facial': 1.0, 'consistency': 1.0, 'conclusion': 1.0} score parsed 0.9991687084354218
+03:18:16 MOSEI distillation queue
+0 jobs
+ALL DONE
+03:18:17 CHAIN DONE

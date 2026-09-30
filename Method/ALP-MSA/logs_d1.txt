@@ -1,0 +1,4 @@
+10 jobs
+09:50:28 start cf_d1C_rv 1111 gpu 0
+09:50:58 start cf_d1C_rv 2222 gpu 0
+09:51:28 start cf_d1C_rv 3333 gpu 1

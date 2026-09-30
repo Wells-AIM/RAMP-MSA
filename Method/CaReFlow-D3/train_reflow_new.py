@@ -202,6 +202,9 @@ def build_teacher(features):
     if "z_hid" in z.files:
         t["z_hid"] = z["z_hid"][safe].astype(np.float16)
         t["has_hid"] = has & z["valid_hid"][safe]
+    if "score_verify" in z.files:   # Direction 1: conclusion of the reasoning chain, used to verify it
+        t["score_verify"] = np.nan_to_num(z["score_verify"][safe]).astype(np.float32)
+        t["has_score_verify"] = has & np.isfinite(z["score_verify"][safe])
     print(f"teacher targets for {has.mean():.3f} of train samples", flush=True)
     return {k: torch.as_tensor(v).to(DEVICE) for k, v in t.items()}
 

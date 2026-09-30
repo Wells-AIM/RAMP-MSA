@@ -1,0 +1,61 @@
+03:45:00 fine-tuning Omni teacher, mode=text
+held: MAE 0.6022 corr 0.8629 acc2(non0) 0.8835
+valid: MAE 0.5825 corr 0.8936 acc2(non0) 0.9167
+test: MAE 0.6043 corr 0.8762 acc2(non0) 0.8887
+held: MAE 0.5282 corr 0.8848 acc2(non0) 0.8954
+valid: MAE 0.5489 corr 0.9105 acc2(non0) 0.9120
+test: MAE 0.5782 corr 0.8748 acc2(non0) 0.8902
+held: MAE 0.5071 corr 0.9197 acc2(non0) 0.9116
+valid: MAE 0.5964 corr 0.8871 acc2(non0) 0.9074
+test: MAE 0.6053 corr 0.8760 acc2(non0) 0.8918
+held: MAE 0.4544 corr 0.9128 acc2(non0) 0.9075
+valid: MAE 0.5601 corr 0.8996 acc2(non0) 0.9213
+test: MAE 0.5338 corr 0.8914 acc2(non0) 0.9055
+held: MAE 0.5278 corr 0.8764 acc2(non0) 0.8929
+valid: MAE 0.5645 corr 0.8931 acc2(non0) 0.9213
+test: MAE 0.6006 corr 0.8644 acc2(non0) 0.8780
+fine-tuned teacher (text) train: covered 1.000  MAE 0.5259  corr 0.8886  acc2(non0) 0.8976  acc7 0.5319
+fine-tuned teacher (text) valid: covered 1.000  MAE 0.5424  corr 0.9064  acc2(non0) 0.9120  acc7 0.4716
+fine-tuned teacher (text) test : covered 1.000  MAE 0.5499  corr 0.8904  acc2(non0) 0.9024  acc7 0.5248
+saved /media/disk3/muxy/Dataset/MSA_raw_feats/MOSI/teacher/teacher_C.npz z_hid (2199, 3584) coverage 1.0
+04:32:36 distillation with teacher C
+25 jobs
+04:32:36 start cf_C_label 1111 gpu 0
+04:33:06 start cf_C_label 2222 gpu 0
+04:33:37 start cf_C_label 3333 gpu 1
+04:34:07 start cf_C_label 4444 gpu 1
+04:34:37 start cf_C_label 5555 gpu 2
+04:35:07 start cf_C_hid 1111 gpu 2
+04:45:48 start cf_C_hid 2222 gpu 0
+04:46:18 start cf_C_hid 3333 gpu 1
+04:46:58 start cf_C_hid 4444 gpu 0
+04:47:28 start cf_C_hid 5555 gpu 1
+04:47:58 start cf_C_all 1111 gpu 2
+04:48:28 start cf_C_all 2222 gpu 2
+04:57:59 start cf_C_all 3333 gpu 0
+04:58:49 start cf_C_all 4444 gpu 1
+04:59:49 start cf_C_all 5555 gpu 0
+05:00:29 start t3_C_label 1111 gpu 1
+05:00:59 start t3_C_label 2222 gpu 2
+05:01:49 start t3_C_label 3333 gpu 2
+05:11:20 start t3_C_label 4444 gpu 0
+05:12:00 start t3_C_label 5555 gpu 1
+05:13:10 start t3_C_all 1111 gpu 0
+05:18:10 start t3_C_all 2222 gpu 1
+05:18:40 start t3_C_all 3333 gpu 2
+05:19:21 start t3_C_all 4444 gpu 2
+05:28:51 start t3_C_all 5555 gpu 0
+ALL DONE
+05:41:12 MOSEI distillation (teacher B)
+9 jobs
+05:41:12 start t3m_none 1111 gpu 0
+05:41:42 start t3m_none 2222 gpu 0
+05:42:12 start t3m_none 3333 gpu 1
+05:42:42 start t3m_label 1111 gpu 1
+05:43:13 start t3m_label 2222 gpu 2
+05:43:43 start t3m_label 3333 gpu 2
+06:27:35 start t3m_all_B 1111 gpu 1
+06:30:15 start t3m_all_B 2222 gpu 0
+06:30:56 start t3m_all_B 3333 gpu 0
+ALL DONE
+07:20:28 OMNI FT CHAIN DONE

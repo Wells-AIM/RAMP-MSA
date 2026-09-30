@@ -1,0 +1,14 @@
+03:19:03 strong teachers
+semantic_omni.jsonl      n=2199 parsed=1.00
+    train n=1231 acc2(non0)=0.849 corr=0.798 MAE=1.109 score std=2.27
+    valid n= 216 acc2(non0)=0.847 corr=0.824 MAE=1.036 score std=2.28
+    test  n= 656 acc2(non0)=0.857 corr=0.795 MAE=1.075 score std=2.31
+semantic_q32.jsonl       n=2199 parsed=1.00
+    train n=1231 acc2(non0)=0.865 corr=0.837 MAE=0.717 score std=1.79
+    valid n= 216 acc2(non0)=0.907 corr=0.876 MAE=0.626 score std=1.83
+    test  n= 655 acc2(non0)=0.878 corr=0.841 MAE=0.720 score std=1.86
+semantic_q72.jsonl       n=2199 parsed=1.00
+    train n=1224 acc2(non0)=0.877 corr=0.841 MAE=0.910 score std=2.07
+    valid n= 216 acc2(non0)=0.870 corr=0.853 MAE=0.906 score std=2.17
+    test  n= 656 acc2(non0)=0.858 corr=0.823 MAE=0.900 score std=2.14
+03:44:13 STRONG DONE

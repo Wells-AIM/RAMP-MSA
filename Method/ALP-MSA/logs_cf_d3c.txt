@@ -19,3 +19,4 @@
 00:19:47 start cf_rf 3333 gpu 2
 00:30:28 start cf_rf 4444 gpu 0
 00:30:58 start cf_rf 5555 gpu 1
+ALL DONE
